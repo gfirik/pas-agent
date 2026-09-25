@@ -367,7 +367,7 @@ const steps = [
         <a href={withBase('/docs/introduction')} class="text-mono-xs color-muted">Docs</a>
         <a href={GITHUB_URL} class="text-mono-xs color-muted" target="_blank" rel="noopener">GitHub</a>
       </div>
-      <div class="text-mono-xs color-muted">Portable Agent Sessions · MIT License · Photos: Unsplash</div>
+      <div class="text-mono-xs color-muted">Portable Agent Sessions · MIT License · Photos: Unsplash · Built by <a href="https://fhsystems.dev" class="footer-credit" target="_blank" rel="noopener">fhsystems</a></div>
     </div>
   </footer>
 </BaseLayout>
@@ -913,6 +913,17 @@ const steps = [
   .footer-links {
     display: flex;
     gap: 24px;
+  }
+
+  .footer-credit {
+    color: var(--color-ink-black);
+    text-decoration: underline;
+    text-decoration-color: var(--color-rule-black);
+    text-underline-offset: 3px;
+  }
+
+  .footer-credit:hover {
+    text-decoration-color: var(--color-amber-signal);
   }
 
   /* ──── Responsive: 768px ──── */
