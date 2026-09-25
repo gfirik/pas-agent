@@ -1,5 +1,6 @@
 ---
 import DocsLayout from '../../layouts/DocsLayout.astro';
+import { withBase } from '../../data/site';
 ---
 <DocsLayout title="Quick Start" activeSlug="quick-start" description="Initialize a PAS-Agent session, record progress, save a checkpoint, and export context for the next AI coding agent.">
   <h1>Quick Start</h1>
@@ -98,4 +99,9 @@ $ pas-agent checkpoint "Login complete"
 # Switch to Codex
 $ pas-agent export --to codex
 $ codex  # reads AGENTS.md at startup</code></pre>
+
+  <p>
+    Next, see <a href={withBase('/docs/workflows')}>Workflows</a> to let your agent keep the session
+    up to date for you.
+  </p>
 </DocsLayout>

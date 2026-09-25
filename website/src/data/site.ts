@@ -14,6 +14,7 @@ export const docSections: { title: string; items: DocPage[] }[] = [
       { label: 'Introduction', slug: 'introduction' },
       { label: 'Installation', slug: 'installation' },
       { label: 'Quick Start', slug: 'quick-start' },
+      { label: 'Workflows', slug: 'workflows' },
     ],
   },
   {
@@ -28,6 +29,7 @@ export const docSections: { title: string; items: DocPage[] }[] = [
     title: 'Reference',
     items: [
       { label: 'CLI Reference', slug: 'cli-reference' },
+      { label: 'Troubleshooting', slug: 'troubleshooting' },
       { label: 'Architecture', slug: 'architecture' },
       { label: 'Development', slug: 'development' },
     ],

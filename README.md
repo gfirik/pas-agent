@@ -75,6 +75,21 @@ pas-agent export --to codex               # writes AGENTS.md
 codex                                     # reads it at startup
 ```
 
+### Let the agent do it
+
+`pas-agent` is an ordinary command, so your agent can keep the session up to date itself. Add
+this to your own part of `CLAUDE.md` / `AGENTS.md` (outside the PAS-Agent block):
+
+```markdown
+## Session handoff (PAS-Agent)
+When you finish a piece of work, record it with
+`pas-agent update --completed "..." --next "..."` (plus `--decision` / `--blocker` as needed).
+At a milestone or before the session ends, run `pas-agent checkpoint "<summary>"`.
+```
+
+More in [Workflows](https://gfirik.github.io/pas-agent/docs/workflows/) and
+[Troubleshooting](https://gfirik.github.io/pas-agent/docs/troubleshooting/).
+
 ## Supported Agents
 
 | `--to` | Writes | Read at startup by |

@@ -1,0 +1,119 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { withBase } from '../../data/site';
+---
+<DocsLayout title="Troubleshooting" activeSlug="troubleshooting" description="Fixes for common PAS-Agent errors, plus how to upgrade, uninstall, and remove PAS-Agent from a project.">
+  <h1>Troubleshooting</h1>
+
+  <p>
+    Every error starts with <code>Error:</code> and says what to do next. This page explains the
+    ones you're most likely to see.
+  </p>
+
+  <h2>No Session Found</h2>
+  <pre><code>Error: no PAS-Agent session found in /home/me/project or any parent directory; run `pas-agent init` first</code></pre>
+  <p>
+    Commands look for <code>.pas-agent/session.json</code> in the current directory and then in
+    each parent directory. Either you're outside the project, or no session exists yet. Change into
+    the project, or run <code>pas-agent init</code>.
+  </p>
+
+  <h2>A Session Already Exists</h2>
+  <pre><code>Error: a PAS-Agent session already exists at /home/me/project/.pas-agent/session.json</code></pre>
+  <p>
+    Each project has one session. To change the task, use
+    <code>pas-agent update --task "..."</code>. To start over, delete <code>.pas-agent/</code>
+    (or move it away) and run <code>init</code> again.
+  </p>
+
+  <h2>Damaged Session File</h2>
+  <pre><code>Error: .pas-agent/session.json is not a valid session file: EOF while parsing an object at line 2 column 0
+The session file is damaged. Fix the JSON by hand or restore it from git.</code></pre>
+  <p>
+    PAS-Agent writes the file atomically, so this usually comes from a hand edit or a merge
+    conflict. The message gives the line and column. Fix the JSON there, or restore the last good
+    version with <code>git checkout -- .pas-agent/session.json</code> if you commit it.
+  </p>
+
+  <h2>Session From a Newer Version</h2>
+  <pre><code>Error: .pas-agent/session.json uses session schema v2, but this build supports up to v1; upgrade pas-agent</code></pre>
+  <p>
+    The file was written by a newer PAS-Agent, for example on another machine. It's rejected
+    instead of being misread. <a href="#upgrade">Upgrade</a> PAS-Agent on this machine.
+  </p>
+
+  <h2>Broken Marker Block</h2>
+  <pre><code>Error: AGENTS.md has a PAS-Agent start marker without a matching end marker (or vice versa); fix it by hand or re-run with --force</code></pre>
+  <p>
+    Export only replaces the text between <code>&lt;!-- pas-agent:start ... --&gt;</code> and
+    <code>&lt;!-- pas-agent:end --&gt;</code>. If one marker was deleted, PAS-Agent can't tell where
+    the block ends, so it changes nothing. Open the file, delete the rest of the old block, and
+    export again.
+  </p>
+  <p>
+    <code>--force</code> also works, but it replaces the <strong>whole file</strong>, including your
+    own instructions. Use it only if the file holds nothing else you want to keep.
+  </p>
+
+  <h2>Invalid Item Number</h2>
+  <pre><code>Error: no item #3 in remaining (it has 2 item(s); run `pas-agent status` to see numbers)</code></pre>
+  <p>
+    Numbers refer to what <code>pas-agent status</code> shows right now, and they shift after items
+    are removed. Check <code>status</code> and try again. If any number is invalid, nothing is changed.
+  </p>
+
+  <h2>Nothing to Update</h2>
+  <pre><code>Error: nothing to update; see `pas-agent update --help`</code></pre>
+  <p>
+    <code>update</code> needs at least one flag that changes something, such as
+    <code>--completed</code> or <code>--next</code>. See the
+    <a href={withBase('/docs/cli-reference')}>CLI Reference</a>.
+  </p>
+
+  <h2>Unknown Agent</h2>
+  <pre><code>error: invalid value 'foo' for '--to &lt;TO&gt;'
+  [possible values: claude-code, codex, opencode, kiro-cli, antigravity, gemini-cli, cursor]</code></pre>
+  <p>
+    Use one of the listed targets (aliases like <code>claude</code>, <code>gemini</code>,
+    <code>kiro</code>, and <code>agy</code> also work). For an agent that isn't listed, export to
+    <code>codex</code> if it reads <code>AGENTS.md</code>, or write anywhere with
+    <code>--output</code>.
+  </p>
+
+  <h2>No Git Information</h2>
+  <p>
+    If <code>init</code> prints no <code>Git:</code> line and checkpoints show no commit, the project
+    isn't a git repository, or <code>git</code> isn't on your <code>PATH</code>. PAS-Agent still works
+    without git; it just can't record branches, commits, or changed files. Run <code>git --version</code>
+    to check.
+  </p>
+
+  <h2>The Agent Ignores the Context</h2>
+  <p>
+    Check that the file was written where the agent looks: the project root, with the name from the
+    <a href={withBase('/docs/portable-state')}>table of files</a>. Agents read these files when a
+    session <em>starts</em>, so restart the agent after exporting. If it still doesn't act on it, say
+    so directly: <em>"read the PAS-Agent session context in AGENTS.md and continue"</em>.
+  </p>
+
+  <h2 id="upgrade">Upgrade</h2>
+  <p>
+    Download the new archive from the
+    <a href="https://github.com/gfirik/pas-agent/releases/latest" target="_blank" rel="noopener">latest release</a>
+    and replace the binary, or reinstall with Cargo:
+  </p>
+  <pre><code>cargo install --force --git https://github.com/gfirik/pas-agent pas-agent-cli</code></pre>
+  <p>
+    Existing session files keep working. Newer versions read older files.
+  </p>
+
+  <h2>Uninstall</h2>
+  <pre><code># Installed with Cargo
+cargo uninstall pas-agent-cli
+
+# Installed from a release archive: delete the pas-agent binary you put on your PATH</code></pre>
+  <p>
+    To remove PAS-Agent from a project, delete <code>.pas-agent/</code> and the block between the
+    <code>pas-agent:start</code> and <code>pas-agent:end</code> markers in your instruction files.
+  </p>
+</DocsLayout>

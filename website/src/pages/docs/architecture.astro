@@ -5,8 +5,49 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
   <h1>Architecture</h1>
 
   <p>
-    PAS-Agent is designed as a minimal, local-first tool. This page
-    documents the current architecture.
+    PAS-Agent is a minimal, local-first tool: one small Rust binary and one JSON file per
+    project. This page explains how the pieces fit together.
+  </p>
+
+  <h2>How It Works</h2>
+  <ol>
+    <li>
+      <strong>One file holds the session.</strong> <code>init</code> creates
+      <code>.pas-agent/session.json</code> at the root of your git repository (it asks
+      <code>git rev-parse --show-toplevel</code> where that is). Every other command walks up from
+      the current directory until it finds that file, so they work from any subfolder.
+    </li>
+    <li>
+      <strong>Commands edit the file.</strong> <code>update</code> and <code>remove</code> load the
+      session, change the task state, and save it again. Saving writes a temporary file and renames
+      it over the old one, so a crash or a full disk can't leave a half-written session.
+    </li>
+    <li>
+      <strong>Checkpoints ask git what changed.</strong> <code>checkpoint</code> runs
+      <code>git</code> for the branch, the commit, and <code>git status</code>, then stores that
+      next to a copy of the task state. PAS-Agent's own directory is excluded, so the session never
+      shows up as "changed".
+    </li>
+    <li>
+      <strong>Export renders Markdown.</strong> <code>export</code> refreshes the git state and turns
+      the session into Markdown. Every value is flattened to a single line and escaped, so nothing you
+      type can break the document or fake its markers.
+    </li>
+    <li>
+      <strong>The block goes where the agent looks.</strong> The Markdown is wrapped in
+      <code>pas-agent:start</code> / <code>pas-agent:end</code> markers and written into the file the
+      target agent loads at startup. If the file has a block, only the block is replaced; if not, the
+      block is appended. Your own content is never touched.
+    </li>
+    <li>
+      <strong>The next agent just reads a file.</strong> No plugin or API is involved. The agent loads
+      its instruction file as usual and finds the task, progress, and decisions in it.
+    </li>
+  </ol>
+  <p>
+    The session format carries a <code>schema_version</code>. New fields get defaults, so older files
+    keep loading, and a file from a newer version is rejected rather than misread. PAS-Agent makes no
+    network requests at any point.
   </p>
 
   <h2>System Overview</h2>

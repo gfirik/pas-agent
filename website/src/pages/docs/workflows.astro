@@ -1,0 +1,123 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+import { withBase } from '../../data/site';
+---
+<DocsLayout title="Workflows" activeSlug="workflows" description="Day-to-day PAS-Agent workflows: let your agent keep the session up to date, switch agents mid-task, resume after a break, and share a session with your team.">
+  <h1>Workflows</h1>
+
+  <p>
+    The <a href={withBase('/docs/quick-start')}>Quick Start</a> shows the commands. This page
+    shows how to fit them into real work so that keeping the session up to date takes almost
+    no effort.
+  </p>
+
+  <h2>Let the Agent Keep the Session Up to Date</h2>
+  <p>
+    <code>pas-agent</code> is an ordinary command, so any coding agent that can run shell
+    commands can update the session itself. You don't have to type <code>update</code> by hand.
+    Tell the agent once, in the instruction file it already reads, and it records its own
+    progress.
+  </p>
+  <p>
+    Add a section like this to your <strong>own</strong> part of <code>CLAUDE.md</code>,
+    <code>AGENTS.md</code>, or <code>GEMINI.md</code>, outside the PAS-Agent block, so exports
+    never overwrite it:
+  </p>
+  <pre><code>{`## Session handoff (PAS-Agent)
+
+This project tracks work in progress with PAS-Agent.
+
+- When you finish a piece of work, record it:
+  pas-agent update --completed "<what you did>" --next "<the next step>"
+- Record decisions and why with --decision, open problems with --blocker,
+  and newly found work with --remaining.
+- At a milestone, or before the session ends, save a checkpoint:
+  pas-agent checkpoint "<one-line summary>"
+- Run pas-agent status to see the task and the numbered lists.
+  Mark remaining item N as done with: pas-agent update --done N`}</code></pre>
+  <p>
+    Most agents follow instructions like these. You can also just ask at the end of a session:
+    <em>"record what you did with pas-agent and save a checkpoint"</em>.
+  </p>
+  <blockquote>
+    <p>
+      Automatic updates without any instructions (shell hooks and an MCP server) are
+      coming next. Until then, this instruction is the easiest way to keep the session current.
+    </p>
+  </blockquote>
+
+  <h2>Switch Agents Mid-Task</h2>
+  <p>
+    The main use case: you hit a usage limit, want a second opinion, or another agent is better
+    at the next step.
+  </p>
+  <ol>
+    <li>Ask the current agent to record its progress and save a checkpoint (or run the commands yourself).</li>
+    <li>Export for the next agent: <code>pas-agent export --to codex</code>.</li>
+    <li>Start the next agent in the same project. It reads the exported file at startup.</li>
+    <li>Tell it to continue, for example <em>"continue the task in the PAS-Agent session context"</em>.</li>
+  </ol>
+  <pre><code>$ pas-agent checkpoint "Login flow done, refresh tokens next"
+$ pas-agent export --to codex
+$ codex</code></pre>
+
+  <h2>Resume the Same Agent Later</h2>
+  <p>
+    A fresh session of the <em>same</em> agent starts with no memory too: the next morning,
+    after the conversation got too long, or after <code>/clear</code>. Export to that agent
+    before you start again:
+  </p>
+  <pre><code>$ pas-agent export --to claude
+$ claude</code></pre>
+
+  <h2>When to Checkpoint</h2>
+  <p>
+    <code>update</code> changes the current state. <code>checkpoint</code> adds a dated entry to
+    the history, with the git state and changed files at that moment. Good times to checkpoint:
+  </p>
+  <ul>
+    <li>A piece of work is finished, even if it isn't committed yet</li>
+    <li>Right before you switch agents or stop for the day</li>
+    <li>Before a risky change, so the history shows where things stood</li>
+  </ul>
+  <p>
+    Checkpoints are cheap. Exports include only the latest 10, so taking many does no harm.
+  </p>
+
+  <h2>Keep the Lists Tidy</h2>
+  <p>
+    Items are numbered in <code>pas-agent status</code>. Use the numbers to change them:
+  </p>
+  <pre><code>$ pas-agent update --done 2              # remaining #2 → completed
+$ pas-agent update --resolve 1           # drop blocker #1
+$ pas-agent remove decisions 3           # delete decision #3
+$ pas-agent update --next "Write tests"  # replace the next action</code></pre>
+  <p>
+    A short, current session helps the next agent more than a long one full of stale items.
+  </p>
+
+  <h2>Solo or Team: Commit the Session?</h2>
+  <table>
+    <thead>
+      <tr><th>Setup</th><th>Recommendation</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Solo, one machine</td>
+        <td>Either works. Add <code>.pas-agent/</code> to <code>.gitignore</code> if you'd rather keep it out of history.</td>
+      </tr>
+      <tr>
+        <td>Solo, several machines</td>
+        <td>Commit <code>.pas-agent/</code> so the session travels with the branch.</td>
+      </tr>
+      <tr>
+        <td>Team handoff</td>
+        <td>Commit it, and review changes to it like any other instructions. See the <a href={withBase('/docs/portable-state#trust-model')}>trust model</a>.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    The exported block in <code>CLAUDE.md</code> or <code>AGENTS.md</code> can always be
+    regenerated from the session, so it's fine to leave it uncommitted or to commit it.
+  </p>
+</DocsLayout>
