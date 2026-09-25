@@ -1,0 +1,36 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Installation" activeSlug="installation" description="Install the PAS-Agent CLI with Cargo. Requires Rust 1.85 or later and git.">
+  <h1>Installation</h1>
+
+  <h2>Prerequisites</h2>
+  <ul>
+    <li><strong>Rust</strong>, version 1.85 or later (<a href="https://rustup.rs" target="_blank" rel="noopener">rustup.rs</a>)</li>
+    <li><strong>Git</strong>, used to capture branch, commit, and changed files</li>
+  </ul>
+
+  <h2>Install with Cargo</h2>
+  <p>Install directly from the Git repository:</p>
+  <pre><code>cargo install --git https://github.com/gfirik/pas-agent pas-agent-cli</code></pre>
+  <p>This installs a binary named <code>pas-agent</code> into <code>~/.cargo/bin</code>.</p>
+
+  <h2>From a Local Clone</h2>
+  <pre><code>git clone https://github.com/gfirik/pas-agent.git
+cd pas-agent
+cargo install --path crates/pas-agent-cli</code></pre>
+
+  <h2>Verify Installation</h2>
+  <pre><code>$ pas-agent --version
+pas-agent 0.1.0</code></pre>
+
+  <h2>Platform Support</h2>
+  <p>
+    PAS-Agent is plain Rust with no platform-specific code, and it calls the
+    <code>git</code> executable on your <code>PATH</code>.
+  </p>
+  <ul>
+    <li><strong>Linux (x86_64)</strong>: tested</li>
+    <li><strong>macOS and Windows</strong>: expected to work but not yet verified. Please report any problems.</li>
+  </ul>
+</DocsLayout>

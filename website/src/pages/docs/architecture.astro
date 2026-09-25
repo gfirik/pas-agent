@@ -1,0 +1,142 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Architecture" activeSlug="architecture" description="How PAS-Agent is built: a Rust core library and CLI, a single JSON session file, and Markdown exports agents read at startup.">
+  <h1>Architecture</h1>
+
+  <p>
+    PAS-Agent is designed as a minimal, local-first tool. This page
+    documents the current architecture.
+  </p>
+
+  <h2>System Overview</h2>
+  <pre><code>PAS-Agent CLI
+    ↓ writes
+.pas-agent/session.json  (portable state)
+    ↓ generates
+CLAUDE.md / AGENTS.md / GEMINI.md  (inside a marked block)
+    ↓ read at startup by
+Claude Code / Codex / OpenCode / Cursor / Kiro CLI / Antigravity / Gemini CLI</code></pre>
+
+  <h2>Crate Structure</h2>
+  <pre><code>crates/
+├── pas-agent-core/     # Session model, storage, context generation
+└── pas-agent-cli/      # CLI binary (clap-based)</code></pre>
+
+  <h3>pas-agent-core</h3>
+  <p>
+    Core library with no CLI dependencies. Handles:
+  </p>
+  <ul>
+    <li>Session data model (<code>Session</code>, <code>TaskState</code>, <code>Checkpoint</code>, <code>FileState</code>, <code>GitRef</code>, <code>Agent</code>)</li>
+    <li>File-based session storage (<code>SessionStore</code>)</li>
+    <li>Context generation and non-destructive writing (<code>generate_context</code>, <code>write_context_file</code>)</li>
+    <li>Git state capture (<code>capture_git_state</code>, <code>get_changed_files</code>)</li>
+  </ul>
+
+  <h3>pas-agent-cli</h3>
+  <p>
+    CLI binary providing user-facing commands: <code>init</code>,
+    <code>checkpoint</code>, <code>status</code>, <code>list</code>,
+    <code>export</code>, <code>update</code>, <code>remove</code>.
+  </p>
+
+  <h2>Storage Format</h2>
+  <p>
+    One versioned JSON file per project, written atomically. No database is required.
+  </p>
+  <pre><code>.pas-agent/
+└── session.json   # task state, git state, checkpoints</code></pre>
+
+  <h2>Integration Model</h2>
+  <p>
+    PAS-Agent does not parse internal agent session formats. Instead, it
+    generates instruction files that each agent reads at session start:
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Agent</th>
+        <th>File</th>
+        <th>Reads At</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Claude Code</td>
+        <td><code>CLAUDE.md</code></td>
+        <td>Session start</td>
+      </tr>
+      <tr>
+        <td>Codex</td>
+        <td><code>AGENTS.md</code></td>
+        <td>Session start</td>
+      </tr>
+      <tr>
+        <td>OpenCode</td>
+        <td><code>AGENTS.md</code></td>
+        <td>Session start</td>
+      </tr>
+      <tr>
+        <td>Kiro CLI</td>
+        <td><code>AGENTS.md</code></td>
+        <td>Session start</td>
+      </tr>
+      <tr>
+        <td>Antigravity</td>
+        <td><code>AGENTS.md</code></td>
+        <td>Session start</td>
+      </tr>
+      <tr>
+        <td>Cursor</td>
+        <td><code>AGENTS.md</code></td>
+        <td>Session start</td>
+      </tr>
+      <tr>
+        <td>Gemini CLI</td>
+        <td><code>GEMINI.md</code></td>
+        <td>Session start</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>Design Decisions</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Decision</th>
+        <th>Rationale</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>JSON for storage</td>
+        <td>Simple, human-readable, no database dependency</td>
+      </tr>
+      <tr>
+        <td>Flat <code>.pas-agent/</code> directory</td>
+        <td>No hidden config complexity, easy to inspect</td>
+      </tr>
+      <tr>
+        <td>Marked export block</td>
+        <td>Coexists with hand-written instruction files instead of overwriting them</td>
+      </tr>
+      <tr>
+        <td><code>schema_version</code> + field defaults</td>
+        <td>Older session files keep loading; newer ones fail loudly instead of being misread</td>
+      </tr>
+      <tr>
+        <td>Markdown export</td>
+        <td>All target agents read markdown instruction files at session start</td>
+      </tr>
+      <tr>
+        <td>No daemon</td>
+        <td>Nothing runs in the background; every change happens when you run a command</td>
+      </tr>
+      <tr>
+        <td>No AI in core</td>
+        <td>Deterministic and offline; any future AI-assisted features stay optional</td>
+      </tr>
+    </tbody>
+  </table>
+</DocsLayout>

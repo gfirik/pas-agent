@@ -1,0 +1,100 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="CLI Reference" activeSlug="cli-reference" description="Reference for every pas-agent command and flag: init, update, remove, checkpoint, status, list, and export.">
+  <h1>CLI Reference</h1>
+
+  <p>
+    PAS-Agent is a single binary, <code>pas-agent</code>. Every command except
+    <code>init</code> finds the session by walking up from the current directory.
+  </p>
+
+  <h2>pas-agent init</h2>
+  <p>Create a new session.</p>
+  <pre><code>pas-agent init [OPTIONS]
+
+Options:
+  -n, --name &lt;NAME&gt;   Project name (defaults to the project directory name)
+  -t, --task &lt;TASK&gt;   Task description (prompted for if omitted)</code></pre>
+  <p>
+    Creates <code>.pas-agent/session.json</code> at the git repository root, or in the
+    current directory outside git, and records the current git state.
+  </p>
+
+  <h2>pas-agent update</h2>
+  <p>Change the task state. List flags can be repeated; each value is one item.</p>
+  <pre><code>pas-agent update [OPTIONS]
+
+Options:
+  --task &lt;TASK&gt;          Set task description
+  --objective &lt;OBJ&gt;      Set objective
+  --next &lt;ACTION&gt;        Set next action
+  --clear-next           Clear the next action
+  --completed &lt;ITEM&gt;     Add a completed item
+  --remaining &lt;ITEM&gt;     Add a remaining item
+  --decision &lt;ITEM&gt;      Add a decision
+  --blocker &lt;ITEM&gt;       Add a blocker
+  --constraint &lt;ITEM&gt;    Add a constraint
+  --discovery &lt;ITEM&gt;     Add a discovery
+  --done &lt;N&gt;             Move remaining item #N to completed
+  --resolve &lt;N&gt;          Remove resolved blocker #N</code></pre>
+  <p>
+    <code>N</code> is the number shown by <code>pas-agent status</code>. Numbered operations
+    run before items are added, so the numbers match what you saw. If any number is
+    invalid, nothing is changed.
+  </p>
+
+  <h2>pas-agent remove</h2>
+  <p>Remove items from a list by number.</p>
+  <pre><code>pas-agent remove &lt;LIST&gt; &lt;N&gt;...
+
+Lists: completed, remaining, decisions, blockers, constraints, discoveries</code></pre>
+
+  <h2>pas-agent checkpoint</h2>
+  <p>Save a checkpoint of the current session state.</p>
+  <pre><code>pas-agent checkpoint [MESSAGE...]</code></pre>
+  <p>
+    Records the git state, the files with uncommitted changes, and a snapshot of the
+    task state. You're prompted for a message if you don't give one.
+  </p>
+
+  <h2>pas-agent status</h2>
+  <p>
+    Show the session: task, numbered lists, live git state, and the latest checkpoint.
+  </p>
+  <pre><code>pas-agent status</code></pre>
+
+  <h2>pas-agent list</h2>
+  <p>List all checkpoints with timestamp, message, file count, and commit.</p>
+  <pre><code>pas-agent list</code></pre>
+
+  <h2>pas-agent export</h2>
+  <p>Write session context into the file a target agent reads at startup.</p>
+  <pre><code>pas-agent export --to &lt;AGENT&gt; [OPTIONS]
+
+Options:
+  -t, --to &lt;AGENT&gt;      claude-code, codex, opencode, kiro-cli, antigravity, gemini-cli, cursor
+  -o, --output &lt;PATH&gt;   Output file (defaults to CLAUDE.md, AGENTS.md or GEMINI.md in the project root)
+      --force           Replace the whole file instead of only the PAS-Agent block</code></pre>
+  <p>
+    Unknown targets are rejected. See <a href="/docs/portable-state">Portable State</a>
+    for how the block is written.
+  </p>
+
+  <h2>Examples</h2>
+  <pre><code># Initialize with task
+pas-agent init --task "Implement user authentication"
+
+# Record progress
+pas-agent update --completed "Login endpoint" --completed "Password hashing" \
+                 --remaining "Token refresh" --next "Implement token refresh"
+
+# Finish remaining item #1
+pas-agent update --done 1
+
+# Save checkpoint
+pas-agent checkpoint "Login complete"
+
+# Export for Codex
+pas-agent export --to codex</code></pre>
+</DocsLayout>

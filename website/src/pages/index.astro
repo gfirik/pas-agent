@@ -1,0 +1,981 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { GITHUB_URL } from '../data/site';
+
+// Intro curtain: each word's initial is kept, the rest collapses away to leave "PAS".
+const introWords = ['PORTABLE', 'AGENT', 'SESSIONS'];
+let introCharIndex = 0;
+const intro = introWords.map((word) => ({
+  initial: { char: word[0], d: introCharIndex++ },
+  rest: [...word.slice(1)].map((char) => ({ char, d: introCharIndex++ })),
+}));
+
+const agents = ['Claude Code', 'Codex', 'OpenCode', 'Cursor', 'Gemini CLI', 'Kiro CLI', 'Antigravity'];
+
+// Rendered as static HTML; the script re-types it when motion is allowed.
+const terminal = [
+  { text: '# 1. start a session once per task', cls: 'color-terminal-dim' },
+  { text: '\n> pas-agent init --task "Migrate auth to OAuth2"', cls: 'color-accent-on-dark' },
+  { text: '\nPAS-Agent session initialized.', cls: '' },
+  { text: '\n\n# 2. while agent 1 (claude) works, record progress', cls: 'color-terminal-dim' },
+  { text: '\n> pas-agent update --completed "PKCE login flow" --next "Token refresh"', cls: 'color-accent-on-dark' },
+  { text: '\n> pas-agent checkpoint "Login flow done"', cls: 'color-accent-on-dark' },
+  { text: '\nCheckpoint #1 saved: Login flow done', cls: '' },
+  { text: '\n\n# 3. hand off to agent 2 (codex)', cls: 'color-terminal-dim' },
+  { text: '\n> pas-agent export --to codex', cls: 'color-accent-on-dark' },
+  { text: '\nUpdated the PAS-Agent block in AGENTS.md for codex.', cls: '' },
+  { text: '\n> codex', cls: 'color-accent-on-dark' },
+];
+
+const steps = [
+  {
+    title: 'Task definition',
+    body: 'The task, the objective, and what should happen next.',
+    file: 'session.json › task',
+    code: '"task": {\n  "description": "Migrate auth to OAuth2",\n  "objective": "Replace session cookies with PKCE",\n  "remaining": ["Token refresh", "Logout"],\n  "next_action": "Token refresh"\n}',
+  },
+  {
+    title: 'Files changed',
+    body: 'Every checkpoint records which files were added, modified, renamed, or deleted.',
+    file: 'session.json › checkpoints[0]',
+    code: '"files_changed": [\n  { "path": "src/lib/auth.ts", "status": "Modified" },\n  { "path": "src/pages/callback.ts", "status": "Untracked" },\n  { "path": "src/session.ts",\n    "status": { "Renamed": { "from": "src/cookie.ts" } } }\n]',
+  },
+  {
+    title: 'Architectural decisions',
+    body: 'Why you chose PKCE over implicit flow, why the table was denormalized.',
+    file: 'session.json › task.decisions',
+    code: '"decisions": [\n  "PKCE over implicit flow: implicit is deprecated for SPAs",\n  "Denormalize user_sessions to avoid a JOIN per request"\n]',
+  },
+  {
+    title: 'Current blockers',
+    body: 'Open questions and obstacles, so the next agent knows about them from the start.',
+    file: 'session.json › task.blockers',
+    code: '"blockers": [\n  "CORS fails on /callback in local dev; needs proxy config",\n  "Token rotation strategy undecided"\n]',
+  },
+];
+---
+<BaseLayout title="PAS-Agent: portable work sessions across AI coding agents">
+  <Fragment slot="head">
+    <!-- Decide before first paint whether the intro plays, so the hero never flashes. -->
+    <script is:inline>
+      (function () {
+        try {
+          var root = document.documentElement;
+          var force = /[?&]intro\b/.test(location.search);
+          var seen = false;
+          try { seen = localStorage.getItem('pas-intro-seen') === '1'; } catch (e) {}
+          var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          if (!reduce && (force || !seen)) {
+            root.classList.add('intro-play');
+            // Failsafe: never leave the page covered if the intro script fails.
+            setTimeout(function () { root.classList.remove('intro-play'); }, 5000);
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </Fragment>
+
+  <!-- First-visit intro: PORTABLE AGENT SESSIONS → PAS, then the curtain lifts. -->
+  <div class="intro" id="intro" aria-hidden="true">
+    <div class="intro-words">
+      {intro.map((word) => (
+        <span class="intro-word">
+          <span class="intro-initial"><span class="intro-char" style={`--d:${word.initial.d}`}>{word.initial.char}</span></span><span class="intro-rest">{word.rest.map((c) => <span class="intro-char" style={`--d:${c.d}`}>{c.char}</span>)}</span>
+        </span>
+      ))}
+    </div>
+    <p class="intro-skip text-mono-xs"><span class="skip-keys">Press any key to skip</span><span class="skip-touch">Tap to skip</span></p>
+  </div>
+
+  <!-- Navigation Bar -->
+  <nav class="nav border-b" aria-label="Main navigation">
+    <div class="container nav-inner">
+      <div class="nav-left">
+        <a href="/" class="nav-logo">
+          <span class="nav-logo-mark bg-ink" aria-hidden="true">PA</span>
+          <span class="text-body-sm font-medium">PAS-Agent</span>
+        </a>
+        <div class="nav-links">
+          <a href="/docs/introduction" class="text-body-sm">Docs</a>
+          <a href={GITHUB_URL} class="text-body-sm" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+      <div class="nav-right">
+        <a href="/docs/installation" class="btn btn-primary">Get Started ↗</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="main">
+    <!-- 1. Hero -->
+    <section class="hero border-b">
+      <div class="container">
+        <div class="hero-split">
+          <div class="hero-left">
+            <p class="hero-eyebrow text-mono-xs anim"><span class="color-accent">PAS</span> · Portable Agent Sessions</p>
+            <h1 class="text-display anim">Portable work sessions across AI coding <span class="mark">agents</span>.</h1>
+          </div>
+          <div class="hero-right">
+            <p class="text-body color-muted anim anim-delay-1">
+              Start a task in Claude Code, pick it up in Codex, finish it in Cursor. PAS-Agent keeps a portable record of the task, decisions, and progress, so switching agents doesn't mean starting over.
+            </p>
+            <div class="hero-actions anim anim-delay-2">
+              <a href="/docs/installation" class="btn btn-primary">Install PAS-Agent ↗</a>
+              <a href={GITHUB_URL} class="btn btn-ghost" target="_blank" rel="noopener">View on GitHub</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Code Window -->
+    <section class="section border-b">
+      <div class="container section-pad anim anim-delay-3">
+        <div class="landscape-box">
+          <div class="landscape-bg" style="background-image: url('/images/mountains.webp');"></div>
+          <div class="landscape-inner">
+            <div class="code-window bg-ink radius-sm">
+              <div class="code-header">
+                <div class="code-dots" aria-hidden="true">
+                  <span></span><span></span><span></span>
+                </div>
+              </div>
+              <div class="code-body">
+                <pre class="text-mono-sm" id="terminal-stream" aria-label="Example terminal session">{terminal.map((line) => <span class={line.cls || undefined}>{line.text}</span>)}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Problem Section -->
+    <section class="section border-b">
+      <div class="container section-pad">
+        <h2 class="text-heading-lg anim">Every agent forgets when you <span class="mark">switch</span>.</h2>
+        <p class="text-body color-muted anim anim-delay-1 mt-20 max-w-prose">
+          Claude Code doesn't know what Codex did. Cursor can't see your Kiro history. Every switch means re-explaining the task, the decisions, and the blockers. PAS-Agent gives every agent the same starting point.
+        </p>
+      </div>
+    </section>
+
+    <!-- Agent Compatibility Strip -->
+    <section class="section border-b">
+      <div class="container section-pad">
+        <h2 class="text-mono-xs color-muted anim works-with-label">Exports context for</h2>
+        <ul class="agent-pills anim anim-delay-1">
+          {agents.map((name) => <li class="agent-pill text-mono-sm">{name}</li>)}
+        </ul>
+      </div>
+    </section>
+
+    <!-- 4. Feature List -->
+    <section class="section border-b">
+      <div class="container section-pad">
+        <div class="scrolly-container">
+          <div class="scrolly-visual">
+            <div class="scrolly-header">
+              <h2 class="text-heading-lg anim">Everything that <span class="mark">matters</span>, captured.</h2>
+              <p class="text-body color-muted anim anim-delay-1 mt-20 max-w-prose">
+                PAS-Agent records the structured context that the next agent needs to keep working.
+              </p>
+            </div>
+            <div class="scrolly-mockup-wrapper">
+              <div class="code-window sticky-mockup">
+                <div class="code-header">
+                  <div class="code-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+                  <span class="text-mono-xs color-terminal-dim" id="scrolly-filename" style="margin-left: auto;">{steps[0].file}</span>
+                </div>
+                <div class="code-body">
+                  <pre class="text-mono-sm"><code id="scrolly-code-content" class="color-cream">{steps[0].code}</code></pre>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="scrolly-content">
+            {steps.map((step, i) => (
+              <div class="scrolly-step" data-filename={step.file} data-code={step.code}>
+                <span class="scrolly-step-num text-mono-xs color-accent">{String(i + 1).padStart(2, '0')}</span>
+                <h3 class="text-subheading mt-12">{step.title}</h3>
+                <p class="text-body-sm color-muted mt-12">{step.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. Timeline -->
+    <section class="section border-b">
+      <div class="container section-pad">
+        <h2 class="text-heading-lg anim">Four commands. <span class="mark">Zero</span> re-explaining.</h2>
+        <div class="timeline-strip border anim anim-delay-1 mt-60">
+          <div class="timeline-label top-left text-mono-xs color-muted">session start</div>
+          <div class="timeline-label top-right text-mono-xs color-muted">agent switch</div>
+
+          <div class="timeline-ticks" aria-hidden="true"></div>
+
+          <ol class="timeline-milestones">
+            <li class="milestone">
+              <span class="milestone-tick bg-accent" aria-hidden="true"></span>
+              <span class="text-mono-sm">01 init</span>
+              <span class="text-body-sm color-muted">Start a session for the task</span>
+            </li>
+            <li class="milestone">
+              <span class="milestone-tick bg-accent" aria-hidden="true"></span>
+              <span class="text-mono-sm">02 update</span>
+              <span class="text-body-sm color-muted">Record progress, decisions, blockers</span>
+            </li>
+            <li class="milestone">
+              <span class="milestone-tick bg-accent" aria-hidden="true"></span>
+              <span class="text-mono-sm">03 checkpoint</span>
+              <span class="text-body-sm color-muted">Snapshot state and changed files</span>
+            </li>
+            <li class="milestone">
+              <span class="milestone-tick bg-accent" aria-hidden="true"></span>
+              <span class="text-mono-sm">04 export</span>
+              <span class="text-body-sm color-muted">Next agent reads it at startup</span>
+            </li>
+          </ol>
+        </div>
+        <p class="text-body-sm color-muted mt-20 anim anim-delay-2">
+          Coming next: shell hooks that update and export automatically when you switch agents.
+        </p>
+      </div>
+    </section>
+
+    <!-- Open Source Values -->
+    <section class="section border-b">
+      <div class="container section-pad">
+        <h2 class="text-heading-lg anim">Open source. Local-first. <span class="mark">Rust</span>.</h2>
+        <div class="values-grid mt-60 anim anim-delay-1">
+          <div class="value-card">
+            <span class="value-card-icon text-mono-xs color-accent">01</span>
+            <h3 class="text-subheading mt-20">No cloud. No accounts.</h3>
+            <p class="text-body-sm color-muted mt-12">Everything stays in your repo. The CLI makes no network requests: no servers, no sign-ups, no telemetry.</p>
+          </div>
+          <div class="value-card">
+            <span class="value-card-icon text-mono-xs color-accent">02</span>
+            <h3 class="text-subheading mt-20">Plain, open formats</h3>
+            <p class="text-body-sm color-muted mt-12">State lives in a versioned JSON file, <code>.pas-agent/session.json</code>. Exports are plain Markdown in the files agents already read.</p>
+          </div>
+          <div class="value-card">
+            <span class="value-card-icon text-mono-xs color-accent">03</span>
+            <h3 class="text-subheading mt-20">Single small binary</h3>
+            <p class="text-body-sm color-muted mt-12">About 1.7 MB, built with cargo. Git is the only thing it needs at runtime. Tested on Linux; macOS and Windows builds are not yet verified.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. FAQ -->
+    <section class="section border-b">
+      <div class="container section-pad">
+        <h2 class="text-heading-lg anim">Frequently <span class="mark">asked</span>.</h2>
+
+        <div class="faq-accordion mt-60 anim anim-delay-1">
+          <details class="faq-details border-t border-b">
+            <summary class="faq-item">
+              <span class="text-body">How do I install PAS-Agent?</span>
+              <span class="faq-icon text-subheading" aria-hidden="true"></span>
+            </summary>
+            <div class="faq-answer">
+              <pre class="text-mono-sm faq-code">cargo install --git {GITHUB_URL} pas-agent-cli</pre>
+              <p class="text-body-sm color-muted mt-12">Requires Rust 1.85 or later and git. This installs the <code>pas-agent</code> binary.</p>
+            </div>
+          </details>
+          <details class="faq-details border-b">
+            <summary class="faq-item">
+              <span class="text-body">What data does it capture?</span>
+              <span class="faq-icon text-subheading" aria-hidden="true"></span>
+            </summary>
+            <div class="faq-answer">
+              <p class="text-body-sm color-muted">Whatever you record: the task, completed and remaining work, decisions, blockers, constraints, and discoveries. Each checkpoint also saves the git branch, commit, and the paths of changed files. It's stored as plain JSON in <code>.pas-agent/</code>.</p>
+            </div>
+          </details>
+          <details class="faq-details border-b">
+            <summary class="faq-item">
+              <span class="text-body">Will it overwrite my existing CLAUDE.md or AGENTS.md?</span>
+              <span class="faq-icon text-subheading" aria-hidden="true"></span>
+            </summary>
+            <div class="faq-answer">
+              <p class="text-body-sm color-muted">No. <code>pas-agent export</code> writes only inside a marked <code>pas-agent</code> block and leaves the rest of the file alone. It replaces the whole file only if you pass <code>--force</code>.</p>
+            </div>
+          </details>
+          <details class="faq-details border-b">
+            <summary class="faq-item">
+              <span class="text-body">Does it send data anywhere?</span>
+              <span class="faq-icon text-subheading" aria-hidden="true"></span>
+            </summary>
+            <div class="faq-answer">
+              <p class="text-body-sm color-muted">No. PAS-Agent is fully local. Session files live in your working directory and are never transmitted anywhere. Whether to commit <code>.pas-agent/</code> is up to you.</p>
+            </div>
+          </details>
+          <details class="faq-details border-b">
+            <summary class="faq-item">
+              <span class="text-body">Can I use it with agents not listed above?</span>
+              <span class="faq-icon text-subheading" aria-hidden="true"></span>
+            </summary>
+            <div class="faq-answer">
+              <p class="text-body-sm color-muted">Yes. Many agents read <code>AGENTS.md</code>, so <code>--to codex</code> often works as-is. You can also write the context to any file with <code>--output</code> and point your agent at it.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Visual Pacing Image -->
+    <section class="section border-b">
+      <div class="container section-pad anim">
+        <div class="landscape-box landscape-box-short" role="img" aria-label="Mountain landscape in the Dolomites">
+          <div class="landscape-bg" style="background-image: url('/images/dolomites.webp');"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="section">
+      <div class="container section-pad">
+        <h2 class="text-heading-lg anim">Start where the last agent <span class="mark">stopped</span>.</h2>
+        <p class="text-body color-muted anim anim-delay-1 mt-20 max-w-prose">Install PAS-Agent, initialize a session, and hand off context in one command.</p>
+        <div class="hero-actions anim anim-delay-2 mt-40">
+          <a href="/docs/installation" class="btn btn-primary">Get Started ↗</a>
+          <a href={GITHUB_URL} class="btn btn-ghost" target="_blank" rel="noopener">View on GitHub</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer border-t">
+    <div class="container footer-inner">
+      <div class="nav-logo">
+        <span class="nav-logo-mark bg-ink" aria-hidden="true">PA</span>
+        <span class="text-body-sm font-medium">PAS-Agent</span>
+      </div>
+      <div class="footer-links">
+        <a href="/docs/introduction" class="text-mono-xs color-muted">Docs</a>
+        <a href={GITHUB_URL} class="text-mono-xs color-muted" target="_blank" rel="noopener">GitHub</a>
+      </div>
+      <div class="text-mono-xs color-muted">Portable Agent Sessions · MIT License · Photos: Unsplash</div>
+    </div>
+  </footer>
+</BaseLayout>
+
+<script>
+  // Intro curtain (only when the inline head script enabled it).
+  const root = document.documentElement;
+  const introEl = document.getElementById('intro');
+  if (introEl && root.classList.contains('intro-play')) {
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    let lifted = false;
+
+    const lift = () => {
+      if (lifted) return;
+      lifted = true;
+      try { localStorage.setItem('pas-intro-seen', '1'); } catch {}
+      introEl.classList.add('is-lifting');
+      root.classList.remove('intro-play'); // unpauses the hero's entrance animation
+      window.removeEventListener('keydown', lift);
+      const done = () => introEl.remove();
+      introEl.addEventListener('transitionend', done, { once: true });
+      setTimeout(done, 1200);
+    };
+
+    window.addEventListener('keydown', lift);
+    introEl.addEventListener('click', lift);
+
+    (async () => {
+      introEl.classList.add('is-streaming');
+      await wait(1050);
+      if (lifted) return;
+      introEl.classList.add('is-fading');
+      await wait(300);
+      if (lifted) return;
+
+      // FLIP: move the three initials from their stacked spots into one row.
+      const initials = Array.from(introEl.querySelectorAll<HTMLElement>('.intro-initial'));
+      const first = initials.map((el) => el.getBoundingClientRect());
+      introEl.classList.add('is-collapsed');
+      const last = initials.map((el) => el.getBoundingClientRect());
+      initials.forEach((el, i) => {
+        el.style.transform = `translate(${first[i].left - last[i].left}px, ${first[i].top - last[i].top}px)`;
+      });
+      void introEl.offsetWidth;
+      introEl.classList.add('is-settling');
+      initials.forEach((el) => { el.style.transform = ''; });
+
+      await wait(900);
+      lift();
+    })();
+  }
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Terminal typing animation. The transcript is already in the HTML; when motion
+  // is allowed we capture it, clear it, and type it back in a loop.
+  const terminal = document.getElementById('terminal-stream');
+  if (terminal && !reduceMotion) {
+    const sequence = Array.from(terminal.children).map((span) => ({
+      text: span.textContent ?? '',
+      cls: span.className,
+    }));
+    let started = false;
+    let currentStep = 0;
+    let currentChar = 0;
+    let span: HTMLSpanElement | null = null;
+
+    const typeNext = () => {
+      if (currentStep >= sequence.length) {
+        setTimeout(() => {
+          terminal.textContent = '';
+          currentStep = 0;
+          currentChar = 0;
+          typeNext();
+        }, 5000);
+        return;
+      }
+
+      const step = sequence[currentStep];
+      if (currentChar === 0) {
+        span = document.createElement('span');
+        if (step.cls) span.className = step.cls;
+        terminal.appendChild(span);
+      }
+
+      if (span && currentChar < step.text.length) {
+        span.textContent += step.text[currentChar];
+        currentChar++;
+        const isCommand = step.cls.includes('accent');
+        setTimeout(typeNext, (isCommand ? 30 : 8) + Math.random() * 20);
+      } else {
+        currentStep++;
+        currentChar = 0;
+        setTimeout(typeNext, 250);
+      }
+    };
+
+    const termObserver = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !started) {
+        started = true;
+        terminal.textContent = '';
+        typeNext();
+      }
+    }, { threshold: 0.5 });
+    termObserver.observe(terminal);
+  }
+
+  // Scrollytelling: each step carries its own snippet in data attributes.
+  const scrollySteps = Array.from(document.querySelectorAll<HTMLElement>('.scrolly-step'));
+  const scrollyCode = document.getElementById('scrolly-code-content');
+  const scrollyFilename = document.getElementById('scrolly-filename');
+
+  if (scrollySteps.length > 0 && scrollyCode) {
+    scrollySteps[0].classList.add('active');
+
+    const scrollyObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const step = entry.target as HTMLElement;
+        scrollySteps.forEach((s) => s.classList.toggle('active', s === step));
+        scrollyCode.textContent = step.dataset.code ?? '';
+        if (scrollyFilename) scrollyFilename.textContent = step.dataset.filename ?? 'session.json';
+      });
+    }, { rootMargin: '-30% 0px -30% 0px', threshold: 0 });
+
+    scrollySteps.forEach((step) => scrollyObserver.observe(step));
+  }
+</script>
+
+<style>
+  /* ──── Intro curtain ──── */
+  .intro { display: none; }
+  :global(html.intro-play) { overflow: hidden; }
+  :global(html.intro-play) .intro,
+  .intro.is-lifting {
+    display: flex;
+  }
+  /* Hold the hero's entrance until the curtain starts lifting. */
+  :global(html.intro-play) .anim { animation-play-state: paused; }
+  .intro {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-page-cream);
+    border-bottom: 2px solid var(--color-amber-signal);
+    cursor: pointer;
+    transition: transform 700ms cubic-bezier(0.76, 0, 0.24, 1);
+  }
+  .intro.is-lifting { transform: translateY(-100%); }
+  .intro-words {
+    display: flex;
+    flex-direction: column;
+    font-family: var(--font-mono);
+    font-size: clamp(48px, 11vw, 144px);
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    color: var(--color-ink-black);
+  }
+  .intro-word { display: flex; }
+  .intro-initial {
+    display: inline-block;
+    color: var(--color-amber-ink);
+  }
+  .intro-char {
+    display: inline-block;
+    opacity: 0;
+    transform: translateY(0.25em);
+  }
+  .is-streaming .intro-char {
+    animation: introChar 320ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: calc(var(--d) * 32ms);
+  }
+  .is-fading .intro-rest {
+    opacity: 0;
+    transition: opacity 280ms ease;
+  }
+  .is-collapsed .intro-words {
+    flex-direction: row;
+    gap: 0.3em;
+  }
+  .is-collapsed .intro-rest { display: none; }
+  .is-settling .intro-initial {
+    transition: transform 650ms cubic-bezier(0.76, 0, 0.24, 1);
+  }
+  .intro-skip {
+    position: absolute;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--color-warm-stone);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .skip-touch { display: none; }
+  @media (hover: none) {
+    .skip-keys { display: none; }
+    .skip-touch { display: inline; }
+  }
+  @keyframes introChar {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .hero-eyebrow {
+    text-transform: uppercase;
+    color: var(--color-warm-stone);
+    margin-bottom: 24px;
+  }
+
+  /* ──── Utility ──── */
+  .mt-12 { margin-top: 12px; }
+  .mt-20 { margin-top: 20px; }
+  .mt-40 { margin-top: 40px; }
+  .mt-60 { margin-top: 60px; }
+  .font-medium { font-weight: 500; }
+  .bg-accent { background: var(--color-amber-signal); }
+  .max-w-prose { max-width: 640px; }
+
+  /* ──── Nav ──── */
+  .nav {
+    position: sticky;
+    top: 0;
+    background: var(--color-page-cream);
+    z-index: 100;
+  }
+  .nav-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 72px;
+  }
+  .nav-left {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+  }
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+  }
+  .nav-logo-mark {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    border-radius: 2px;
+  }
+  .nav-links {
+    display: flex;
+    gap: 24px;
+  }
+
+  /* ──── Hero ──── */
+  .hero {
+    padding: 0;
+  }
+  .hero .container {
+    padding-top: 96px;
+    padding-bottom: 96px;
+  }
+  .hero-split {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: 60px;
+    align-items: start;
+  }
+  .hero-right {
+    padding-top: 16px;
+  }
+  .hero-actions {
+    display: flex;
+    gap: 16px;
+    margin-top: 32px;
+    flex-wrap: wrap;
+  }
+
+  /* ──── Sections (generic) ──── */
+  .section-pad {
+    padding-top: 96px;
+    padding-bottom: 96px;
+  }
+
+  /* ──── Landscape Box / Code Window ──── */
+  .landscape-box {
+    width: 100%;
+    min-height: 500px;
+    background-color: var(--color-linen-beige);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .landscape-bg {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    filter: sepia(0.3) saturate(0.8) contrast(1.1) brightness(0.9);
+  }
+  .landscape-inner {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    position: relative;
+    z-index: 10;
+  }
+  .landscape-box-short {
+    min-height: 400px;
+  }
+  .code-window {
+    width: 100%;
+    max-width: 640px;
+    background: #111111;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .code-header {
+    padding: 16px 24px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+  }
+  .code-dots {
+    display: flex;
+    gap: 8px;
+  }
+  .code-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-warm-stone);
+  }
+  .code-body {
+    padding: 24px;
+    min-height: 280px;
+  }
+  pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: var(--color-page-cream);
+  }
+
+  /* ──── Agent Compatibility Pills ──── */
+  .works-with-label {
+    text-transform: uppercase;
+    margin-bottom: 24px;
+  }
+  .agent-pills {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .agent-pill {
+    background: var(--color-linen-beige);
+    padding: 10px 16px;
+    border-radius: 800px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-ink-black);
+  }
+
+  /* ──── Scrollytelling ──── */
+  .scrolly-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: start;
+    position: relative;
+  }
+  .scrolly-visual {
+    position: sticky;
+    top: 72px;
+    height: calc(100vh - 72px);
+    display: flex;
+    flex-direction: column;
+  }
+  .scrolly-header {
+    flex-shrink: 0;
+    padding-top: 24px;
+  }
+  .scrolly-mockup-wrapper {
+    flex: 1;
+    display: flex;
+    align-items: center;
+  }
+  .sticky-mockup {
+    width: 100%;
+    margin: 0;
+  }
+  .scrolly-content {
+    padding-top: calc(50vh - 36px);
+    padding-bottom: 20vh;
+  }
+  .scrolly-step {
+    padding: 32px 0 32px 32px;
+    margin-bottom: 30vh;
+    transition: opacity 0.5s ease, border-color 0.5s ease, transform 0.5s ease;
+    border-left: 2px solid var(--color-rule-black);
+  }
+  /* Only hide inactive steps when JS is running to activate them. */
+  :global(.js) .scrolly-step:not(.active) {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  .scrolly-step:last-child {
+    margin-bottom: 0;
+  }
+  .scrolly-step.active {
+    border-left-color: var(--color-amber-signal);
+    transform: translateY(0);
+  }
+  .scrolly-step-num {
+    display: inline-block;
+    letter-spacing: 0.4px;
+  }
+
+  /* ──── Values Grid ──── */
+  .values-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--color-rule-black);
+    border: 1px solid var(--color-rule-black);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .value-card {
+    padding: 32px;
+    background: var(--color-page-cream);
+  }
+  .value-card-icon {
+    display: inline-block;
+    letter-spacing: 0.4px;
+  }
+
+  /* ──── Timeline ──── */
+  .timeline-strip {
+    position: relative;
+    padding: 40px;
+    background: var(--color-page-cream);
+  }
+  .timeline-label {
+    position: absolute;
+  }
+  .top-left { top: 8px; left: 12px; }
+  .top-right { top: 8px; right: 12px; }
+  .timeline-ticks {
+    height: 20px;
+    background-image: repeating-linear-gradient(
+      to right,
+      var(--color-ash-gray) 0,
+      var(--color-ash-gray) 1px,
+      transparent 1px,
+      transparent 8px
+    );
+    margin-bottom: 24px;
+    opacity: 0.5;
+  }
+  .timeline-milestones {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .milestone {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .milestone-tick {
+    width: 2px;
+    height: 12px;
+  }
+
+  /* ──── FAQ Accordion ──── */
+  .faq-details summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  .faq-details summary::-webkit-details-marker {
+    display: none;
+  }
+  .faq-details summary::marker {
+    display: none;
+    content: '';
+  }
+  .faq-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 20px 40px;
+    align-items: center;
+  }
+  .faq-icon::before { content: '+'; }
+  details[open] .faq-icon::before { content: '−'; }
+  .faq-icon {
+    flex-shrink: 0;
+    user-select: none;
+    line-height: 1;
+  }
+  .faq-answer {
+    padding: 0 40px 20px 40px;
+  }
+  .faq-code {
+    color: var(--color-ink-black);
+    background: var(--color-linen-beige);
+    padding: 12px 16px;
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+  .faq-answer code,
+  .value-card code {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    background: var(--color-linen-beige);
+    padding: 2px 6px;
+    border-radius: 2px;
+  }
+
+  /* ──── Footer ──── (padding lives on .footer-inner so the container lines reach the border) */
+  .footer-inner {
+    padding-top: 40px;
+    padding-bottom: 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .footer-links {
+    display: flex;
+    gap: 24px;
+  }
+
+  /* ──── Responsive: 768px ──── */
+  @media (max-width: 768px) {
+    .hero-split {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+    .hero .container {
+      padding-top: 72px;
+      padding-bottom: 56px;
+    }
+    .section-pad {
+      padding-top: 56px;
+      padding-bottom: 56px;
+    }
+    .timeline-milestones {
+      grid-template-columns: 1fr;
+    }
+    .code-window {
+      max-width: 100%;
+    }
+    .nav-links {
+      display: none;
+    }
+    .faq-item {
+      padding-left: 20px;
+      padding-right: 20px;
+    }
+    .faq-answer {
+      padding-left: 20px;
+      padding-right: 20px;
+    }
+    .hero-actions {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .footer-inner {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .landscape-box {
+      min-height: 360px;
+    }
+    .values-grid {
+      grid-template-columns: 1fr;
+    }
+    .scrolly-container {
+      grid-template-columns: 1fr;
+    }
+    .scrolly-visual {
+      position: relative;
+      top: auto;
+      height: auto;
+    }
+    .scrolly-content {
+      padding-top: 40px;
+      padding-bottom: 40px;
+    }
+    .scrolly-step {
+      margin-bottom: 40px;
+    }
+    :global(.js) .scrolly-step:not(.active) {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.js) .scrolly-step:not(.active) {
+      opacity: 1;
+      transform: none;
+    }
+  }
+</style>

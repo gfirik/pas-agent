@@ -1,0 +1,57 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Introduction" activeSlug="introduction" description="What PAS-Agent is: a local-first CLI that keeps a portable record of coding work so you can hand it from one AI coding agent to another.">
+  <h1>Introduction</h1>
+  <p>
+    PAS-Agent is an open-source, local-first tool for preserving and transferring
+    coding work between AI coding agents. <strong>PAS</strong> stands for
+    <strong>Portable Agent Sessions</strong>.
+  </p>
+  <p>
+    When you switch from one coding agent to another, say from Claude Code to
+    Codex, the context you built up doesn't come with you. The task, the decisions,
+    the files you changed, and what comes next all have to be explained again.
+  </p>
+  <p>
+    PAS-Agent records that context in a provider-neutral session file and exports it
+    into the instruction file the next agent already reads at startup
+    (<code>CLAUDE.md</code>, <code>AGENTS.md</code>, or <code>GEMINI.md</code>).
+  </p>
+
+  <h2>The Core Idea</h2>
+  <pre><code>Claude Code
+    ↓
+pas-agent update / checkpoint
+    ↓
+.pas-agent/session.json   (portable session state)
+    ↓
+pas-agent export --to codex
+    ↓
+Codex reads AGENTS.md and continues the same work</code></pre>
+
+  <h2>What PAS-Agent Is</h2>
+  <ul>
+    <li><strong>Local-first</strong>: all data stays in your project directory</li>
+    <li><strong>Provider-neutral</strong>: exports for Claude Code, Codex, OpenCode, Cursor, Gemini CLI, Kiro CLI, and Antigravity</li>
+    <li><strong>CLI-first</strong>: a single Rust binary, no daemon</li>
+    <li><strong>Non-destructive</strong>: exports go into a marked block, so your own instructions are never overwritten</li>
+    <li><strong>Open source</strong>: MIT licensed</li>
+  </ul>
+
+  <h2>What PAS-Agent Is Not</h2>
+  <ul>
+    <li>Not a replacement coding agent</li>
+    <li>Not a cloud service</li>
+    <li>Not a parser for agents' proprietary session formats</li>
+    <li>Not an orchestration framework</li>
+  </ul>
+
+  <h2>Current Status</h2>
+  <p>
+    PAS-Agent is in <strong>Phase 1 (Foundation)</strong>. The session model,
+    CLI, checkpoints, and context export are implemented, and you update the session
+    by hand. Phase 2 will add shell hooks that update and export automatically when you
+    switch agents.
+  </p>
+</DocsLayout>

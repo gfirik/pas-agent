@@ -1,0 +1,602 @@
+---
+import Head from '../components/Head.astro';
+import { docPages, docSections, GITHUB_URL } from '../data/site';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+  activeSlug?: string;
+}
+
+const { title, description, activeSlug } = Astro.props;
+
+const activeIndex = docPages.findIndex((i) => i.slug === activeSlug);
+const prevPage = activeIndex > 0 ? docPages[activeIndex - 1] : null;
+const nextPage = activeIndex !== -1 && activeIndex < docPages.length - 1 ? docPages[activeIndex + 1] : null;
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <Head title={`${title} · PAS-Agent Docs`} description={description} />
+  </head>
+  <body>
+    <a href="#content" class="skip-link">Skip to content</a>
+
+    <nav class="docs-topbar" aria-label="Main navigation">
+      <div class="docs-topbar-inner">
+        <a href="/" class="docs-logo">
+          <span class="docs-logo-mark" aria-hidden="true">PA</span>
+          PAS-Agent
+        </a>
+        <button class="docs-menu-toggle" aria-label="Toggle documentation menu" aria-expanded="false" aria-controls="docs-sidebar">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 20 20" fill="none">
+            <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <div class="docs-topbar-links">
+          <a href="/">Home</a>
+          <a href="/docs/introduction" class="active">Docs</a>
+          <a href={GITHUB_URL} target="_blank" rel="noopener">GitHub</a>
+          <a href="/docs/installation" class="docs-topbar-cta">Get Started</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="docs-layout">
+      <aside class="docs-sidebar" id="docs-sidebar" aria-label="Documentation navigation">
+        {docSections.map((section) => (
+          <div class="docs-sidebar-section">
+            <p class="docs-sidebar-heading">{section.title}</p>
+            <ul>
+              {section.items.map((item) => (
+                <li>
+                  <a
+                    href={`/docs/${item.slug}`}
+                    class:list={['docs-sidebar-link', { active: activeSlug === item.slug }]}
+                    aria-current={activeSlug === item.slug ? 'page' : undefined}
+                  >
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </aside>
+
+      <main id="content" class="docs-content">
+        <article>
+          <slot />
+          <div class="docs-nav-links">
+            {prevPage ? (
+              <a href={`/docs/${prevPage.slug}`} class="docs-nav-link prev">
+                <span class="nav-dir">Previous</span>
+                <span class="nav-label">{prevPage.label}</span>
+              </a>
+            ) : <div></div>}
+            {nextPage ? (
+              <a href={`/docs/${nextPage.slug}`} class="docs-nav-link next">
+                <span class="nav-dir">Next</span>
+                <span class="nav-label">{nextPage.label}</span>
+              </a>
+            ) : <div></div>}
+          </div>
+        </article>
+      </main>
+
+      <aside class="docs-toc" aria-label="Table of contents">
+        <p class="docs-toc-heading">On this page</p>
+        <ul class="docs-toc-list" id="docs-toc-list"></ul>
+      </aside>
+    </div>
+
+    <script>
+      const tocList = document.getElementById('docs-toc-list');
+      const article = document.querySelector('.docs-content article');
+      if (tocList && article) {
+        const headings = article.querySelectorAll('h2, h3');
+        headings.forEach((heading) => {
+          if (!heading.id) {
+            heading.id = heading.textContent
+              ?.toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/(^-|-$)/g, '') || '';
+          }
+          const li = document.createElement('li');
+          const a = document.createElement('a');
+          a.href = `#${heading.id}`;
+          a.textContent = heading.textContent;
+          if (heading.tagName === 'H3') {
+            li.classList.add('docs-toc-indent');
+          }
+          li.appendChild(a);
+          tocList.appendChild(li);
+        });
+
+        const tocLinks = tocList.querySelectorAll('a');
+        let currentActiveId: string | null = null;
+
+        const updateToc = () => {
+          let targetId = currentActiveId;
+          const isAtBottom = (window.innerHeight + Math.round(window.scrollY)) >= (document.documentElement.scrollHeight - 20);
+          if (isAtBottom && headings.length > 0) {
+            targetId = headings[headings.length - 1].id;
+          }
+          if (targetId) {
+            tocLinks.forEach((link) => {
+              link.classList.toggle('active', link.getAttribute('href') === `#${targetId}`);
+            });
+          }
+        };
+
+        const observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                currentActiveId = entry.target.id;
+              }
+            });
+            updateToc();
+          },
+          { rootMargin: '-80px 0px -70% 0px' }
+        );
+        headings.forEach((h) => observer.observe(h));
+        
+        window.addEventListener('scroll', updateToc, { passive: true });
+        updateToc();
+      }
+
+      const toggle = document.querySelector('.docs-menu-toggle');
+      const sidebar = document.querySelector('.docs-sidebar');
+      if (toggle instanceof HTMLElement && sidebar) {
+        const setOpen = (open: boolean) => {
+          toggle.setAttribute('aria-expanded', String(open));
+          sidebar.classList.toggle('open', open);
+        };
+        toggle.addEventListener('click', () => {
+          setOpen(toggle.getAttribute('aria-expanded') !== 'true');
+        });
+        sidebar.querySelectorAll('a').forEach((link) => {
+          link.addEventListener('click', () => setOpen(false));
+        });
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape' && sidebar.classList.contains('open')) {
+            setOpen(false);
+            toggle.focus();
+          }
+        });
+      }
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ── Content Typography ── */
+  .docs-content h1 {
+    font-family: var(--font-sans);
+    font-size: 40px;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-rule-black);
+  }
+
+  .docs-content h2 {
+    font-family: var(--font-sans);
+    font-size: 36px;
+    letter-spacing: -0.02em;
+    margin-top: 40px;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--color-rule-black);
+    scroll-margin-top: 80px;
+  }
+
+  .docs-content h3 {
+    font-family: var(--font-sans);
+    font-size: 20px;
+    letter-spacing: -0.01em;
+    margin-top: 32px;
+    margin-bottom: 12px;
+    scroll-margin-top: 80px;
+  }
+
+  .docs-content p {
+    margin-bottom: 16px;
+    line-height: 1.7;
+    color: var(--color-warm-stone);
+    font-size: 18px;
+  }
+
+  .docs-content ul,
+  .docs-content ol {
+    margin-bottom: 16px;
+    padding-left: 24px;
+  }
+
+  .docs-content li {
+    margin-bottom: 8px;
+    color: var(--color-warm-stone);
+    line-height: 1.6;
+    font-size: 18px;
+  }
+
+  .docs-content pre {
+    margin-bottom: 16px;
+    background: #191918;
+    border-radius: 2px;
+    padding: 16px;
+    overflow-x: auto;
+  }
+
+  .docs-content code {
+    font-family: var(--font-mono);
+    font-size: 14px;
+  }
+
+  .docs-content :not(pre) > code {
+    padding: 2px 4px;
+    background: var(--color-linen-beige);
+    border-radius: 2px;
+  }
+
+  .docs-content pre code {
+    background: none;
+    padding: 0;
+    color: var(--color-page-cream);
+  }
+
+  .docs-content blockquote {
+    border-left: 2px solid var(--color-amber-signal);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    border-radius: 0 2px 2px 0;
+  }
+
+  .docs-content blockquote p {
+    margin-bottom: 0;
+    color: var(--color-ink-black);
+  }
+
+  .docs-content strong {
+    font-weight: 600;
+    color: var(--color-ink-black);
+  }
+
+  .docs-content hr {
+    border: none;
+    border-top: 1px solid var(--color-rule-black);
+    margin: 32px 0;
+  }
+
+  .docs-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    font-size: 16px;
+  }
+
+  .docs-content th,
+  .docs-content td {
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--color-rule-black);
+  }
+
+  .docs-content th {
+    font-weight: 600;
+    color: var(--color-ink-black);
+  }
+
+  .docs-content td {
+    color: var(--color-warm-stone);
+  }
+
+  /* ── Topbar ── */
+  .docs-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--color-page-cream);
+    border-bottom: 1px solid var(--color-rule-black);
+  }
+
+  .docs-topbar-inner {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 72px;
+  }
+
+  .docs-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--color-ink-black);
+    text-decoration: none;
+  }
+  .docs-logo:hover { color: var(--color-ink-black); }
+
+  .docs-logo-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: var(--color-ink-black);
+    color: var(--color-page-cream);
+    border-radius: 2px;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+
+  .docs-menu-toggle {
+    display: none;
+    background: none;
+    border: 1px solid var(--color-rule-black);
+    border-radius: 2px;
+    padding: 8px;
+    color: var(--color-ink-black);
+    cursor: pointer;
+    line-height: 0;
+    transition: border-color 120ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+  .docs-menu-toggle:hover { border-color: var(--color-warm-stone); }
+
+  .docs-topbar-links {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 16px;
+    font-weight: 500;
+  }
+
+  .docs-topbar-links a {
+    color: var(--color-warm-stone);
+    text-decoration: none;
+    transition: color 120ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .docs-topbar-links a:hover,
+  .docs-topbar-links a.active {
+    color: var(--color-ink-black);
+  }
+
+  .docs-topbar-cta {
+    background: var(--color-ink-black) !important;
+    color: var(--color-page-cream) !important;
+    padding: 4px 12px !important;
+    border-radius: 2px;
+    font-weight: 500;
+  }
+  .docs-topbar-cta:hover {
+    background: #2a2825 !important;
+  }
+
+  /* ── Three-Column Layout ── */
+  .docs-layout {
+    display: flex;
+    flex: 1;
+    max-width: 1440px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 0 40px;
+  }
+
+  /* ── Sidebar ── */
+  .docs-sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    padding: 24px 0;
+    padding-right: 20px;
+    border-right: 1px solid var(--color-rule-black);
+    position: sticky;
+    top: 72px;
+    height: calc(100vh - 72px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-rule-black) transparent;
+  }
+
+  .docs-sidebar-section {
+    margin-bottom: 20px;
+  }
+
+  .docs-sidebar-heading {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-warm-stone);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 8px;
+  }
+
+  .docs-sidebar ul {
+    list-style: none;
+  }
+
+  .docs-sidebar-link {
+    display: block;
+    padding: 4px 8px;
+    margin: 0 -8px;
+    color: var(--color-warm-stone);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    border-radius: 2px;
+    text-decoration: none;
+    transition: all 120ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+
+  .docs-sidebar-link:hover {
+    color: var(--color-ink-black);
+    background: var(--color-linen-beige);
+  }
+
+  .docs-sidebar-link.active {
+    color: var(--color-ink-black);
+    background: rgba(252, 170, 45, 0.08);
+    font-weight: 500;
+  }
+
+  /* ── Content Area ── */
+  .docs-content {
+    flex: 1;
+    min-width: 0;
+    padding: 32px 32px;
+    padding-bottom: 120px;
+  }
+
+  .docs-content article {
+    max-width: 760px;
+  }
+
+  /* ── Table of Contents ── */
+  .docs-toc {
+    width: 180px;
+    flex-shrink: 0;
+    padding: 24px 0;
+    padding-left: 20px;
+    border-left: 1px solid var(--color-rule-black);
+    position: sticky;
+    top: 72px;
+    height: calc(100vh - 72px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-rule-black) transparent;
+  }
+
+  .docs-toc-heading {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-warm-stone);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 12px;
+  }
+
+  .docs-toc-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .docs-toc-list a {
+    display: block;
+    padding: 4px 0;
+    font-size: 0.8125rem;
+    color: var(--color-warm-stone);
+    text-decoration: none;
+    transition: color 120ms cubic-bezier(0.25, 0.1, 0.25, 1);
+    border-left: 2px solid transparent;
+    padding-left: 12px;
+    margin-left: -12px;
+  }
+
+  .docs-toc-list a:hover {
+    color: var(--color-ink-black);
+  }
+
+  .docs-toc-list a.active {
+    color: var(--color-ink-black);
+    border-left-color: var(--color-amber-signal);
+    font-weight: 500;
+  }
+
+  .docs-toc-indent a {
+    padding-left: 20px;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 1100px) {
+    .docs-toc { display: none; }
+  }
+
+  @media (max-width: 768px) {
+    .docs-menu-toggle { display: block; }
+    .docs-topbar-links { display: none; }
+
+    .docs-sidebar {
+      display: none;
+      position: fixed;
+      top: 72px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      background: var(--color-page-cream);
+      z-index: 99;
+      padding: 16px;
+      border-right: none;
+      height: auto;
+    }
+
+    .docs-sidebar.open { display: block; }
+
+    .docs-content {
+      padding: 20px 16px;
+    }
+  }
+
+  /* ── Docs Pagination Navigation ── */
+  .docs-nav-links {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-top: 64px;
+    padding-top: 32px;
+    border-top: 1px solid var(--color-rule-black);
+  }
+  .docs-nav-link {
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    border: 1px solid var(--color-rule-black);
+    border-radius: 4px;
+    text-decoration: none;
+    transition: border-color 0.2s, background-color 0.2s;
+  }
+  .docs-nav-link:hover {
+    border-color: var(--color-ink-black);
+    background-color: var(--color-linen-beige);
+  }
+  .docs-nav-link.next {
+    align-items: flex-end;
+    text-align: right;
+  }
+  .docs-nav-link .nav-dir {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--color-warm-stone);
+    margin-bottom: 8px;
+  }
+  .docs-nav-link .nav-label {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--color-ink-black);
+  }
+
+  @media (max-width: 600px) {
+    .docs-nav-links {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

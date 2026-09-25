@@ -1,0 +1,56 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Checkpoints" activeSlug="checkpoints" description="Checkpoints snapshot PAS-Agent task state, git state, and changed files at a point in time.">
+  <h1>Checkpoints</h1>
+
+  <p>
+    Checkpoints are snapshots of your session at a specific point in time.
+    They record the full task state, the git state, and which files had uncommitted changes.
+  </p>
+
+  <h2>Creating a Checkpoint</h2>
+  <pre><code>$ pas-agent checkpoint "Implemented login endpoint"
+Checkpoint #3 saved: Implemented login endpoint
+  Files with uncommitted changes: 4</code></pre>
+  <p>Each checkpoint records:</p>
+  <ul>
+    <li>A message describing the milestone</li>
+    <li>The current git branch and commit</li>
+    <li>Files with uncommitted changes (staged, unstaged, and untracked), each marked as added, modified, deleted, renamed, or untracked</li>
+    <li>A snapshot of the full task state</li>
+    <li>A timestamp</li>
+  </ul>
+
+  <h2>Listing Checkpoints</h2>
+  <pre><code>$ pas-agent list
+Checkpoints for my-project (3):
+    1. 2026-09-17 04:30:00 UTC  Set up project structure  (6 files)  [abc1234d]
+    2. 2026-09-17 04:35:12 UTC  Implemented login endpoint  (3 files)  [abc1234d]
+    3. 2026-09-17 04:39:40 UTC  Added password hashing  (1 file)  [9f8e7d6c]</code></pre>
+
+  <h2>How Checkpoints Are Used</h2>
+  <p>
+    When you export, the context file includes the most recent checkpoints and the files
+    changed at the latest one:
+  </p>
+  <pre><code>## Files Changed (as of last checkpoint)
+- `src/auth/hash.rs` (untracked)
+- `src/auth/mod.rs` (modified)
+
+## Checkpoint History
+- **2026-09-17 04:30 UTC** — Set up project structure
+- **2026-09-17 04:35 UTC** — Implemented login endpoint
+- **2026-09-17 04:39 UTC** — Added password hashing</code></pre>
+  <p>
+    To keep context files small, only the last 10 checkpoints and 50 files are exported.
+    Some agents limit how much of an instruction file they load. The full history
+    stays in <code>session.json</code>.
+  </p>
+
+  <h2>Storage</h2>
+  <p>
+    Checkpoints are stored inside <code>.pas-agent/session.json</code>, in order.
+    Checkpoints taken in quick succession are all kept.
+  </p>
+</DocsLayout>

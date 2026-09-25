@@ -1,0 +1,95 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Sessions" activeSlug="sessions" description="The PAS-Agent session model: task state, git state, checkpoints, and the versioned session.json format.">
+  <h1>Sessions</h1>
+
+  <p>
+    A session is the core abstraction in PAS-Agent. It represents an active
+    coding task with all its operational context.
+  </p>
+
+  <h2>Session Data Model</h2>
+  <ul>
+    <li><strong>Project name</strong>: the project this session belongs to</li>
+    <li><strong>Task description</strong>: what you're working on</li>
+    <li><strong>Objective</strong>: the specific goal</li>
+    <li><strong>Completed work</strong>: what's been done</li>
+    <li><strong>Remaining work</strong>: what's left to do</li>
+    <li><strong>Next action</strong>: the immediate next step</li>
+    <li><strong>Blockers</strong>: current obstacles</li>
+    <li><strong>Decisions</strong>: choices made during the session</li>
+    <li><strong>Constraints</strong>: limitations or requirements</li>
+    <li><strong>Discoveries</strong>: things learned during the session</li>
+    <li><strong>Git state</strong>: branch, commit, and whether there are uncommitted changes</li>
+    <li><strong>Checkpoints</strong>: saved snapshots of progress</li>
+  </ul>
+
+  <h2>Storage</h2>
+  <p>
+    Everything lives in a single JSON file at the project root:
+  </p>
+  <pre><code>.pas-agent/
+└── session.json   # task state, git state, and all checkpoints</code></pre>
+  <p>
+    Writes are atomic: the file is written to a temporary file and then renamed into place,
+    so a crash can't leave a half-written session behind.
+  </p>
+
+  <h2>File Format</h2>
+  <p>
+    <code>session.json</code> carries a <code>schema_version</code>. Missing fields are
+    filled with defaults, so older files keep loading as fields are added. A file written
+    by a newer PAS-Agent with a higher schema version is rejected with a clear error
+    instead of being misread.
+  </p>
+  <pre><code>{`{
+  "schema_version": 1,
+  "id": "46d89609-104d-4a43-907d-dbca99704a85",
+  "project_name": "my-project",
+  "created_at": "2026-09-17T04:30:00Z",
+  "updated_at": "2026-09-17T04:39:00Z",
+  "task": {
+    "description": "Implement user authentication",
+    "objective": "",
+    "completed": ["Created login endpoint"],
+    "remaining": ["Add token refresh"],
+    "next_action": "Implement token refresh endpoint",
+    "blockers": [],
+    "decisions": ["Use bcrypt for hashing"],
+    "constraints": [],
+    "discoveries": []
+  },
+  "git": { "branch": "main", "commit": "abc1234d…", "dirty": true },
+  "checkpoints": [ … ]
+}`}</code></pre>
+
+  <h2>Session Lifecycle</h2>
+  <pre><code># Create
+pas-agent init --task "..."
+
+# Update
+pas-agent update --completed "..." --remaining "..."
+pas-agent update --done 1
+pas-agent remove decisions 2
+
+# Checkpoint
+pas-agent checkpoint "..."
+
+# Export (writes context for another agent)
+pas-agent export --to codex</code></pre>
+
+  <h2>One Session Per Project</h2>
+  <p>
+    Each project holds one active session, at the git repository root, or in the
+    directory where you ran <code>init</code> outside git. Commands run from a
+    subdirectory walk up to find it.
+  </p>
+
+  <h2>Commit It or Keep It Local?</h2>
+  <p>
+    It's your choice. Commit <code>.pas-agent/</code> to carry the session across machines
+    or share it with teammates. Add it to <code>.gitignore</code> to keep it private.
+    PAS-Agent ignores its own directory when it checks for uncommitted changes.
+  </p>
+</DocsLayout>

@@ -1,0 +1,76 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Development" activeSlug="development" description="Build, test, and contribute to PAS-Agent: Rust workspace layout, checks to run, and the Astro website.">
+  <h1>Development</h1>
+
+  <h2>Prerequisites</h2>
+  <ul>
+    <li><strong>Rust</strong>, 1.85 or later (Cargo is included)</li>
+    <li><strong>Git</strong></li>
+    <li><strong>Bun</strong>, only for the website</li>
+  </ul>
+
+  <h2>Clone and Build</h2>
+  <pre><code>git clone https://github.com/gfirik/pas-agent.git
+cd pas-agent
+cargo build</code></pre>
+
+  <h2>Run Tests</h2>
+  <pre><code>cargo test</code></pre>
+  <p>
+    Unit tests live next to the code in <code>pas-agent-core</code>. End-to-end tests that
+    run the real binary live in <code>crates/pas-agent-cli/tests/</code>.
+  </p>
+
+  <h2>Lint and Format</h2>
+  <pre><code>cargo clippy --all-targets -- -D warnings
+cargo fmt --check</code></pre>
+
+  <h2>Website</h2>
+  <pre><code>cd website
+bun install
+bun run dev     # local dev server
+bun run build   # static output in dist/</code></pre>
+
+  <h2>Project Structure</h2>
+  <pre><code>pas-agent/
+├── Cargo.toml                    # Workspace root
+├── crates/
+│   ├── pas-agent-core/          # Core library
+│   │   ├── Cargo.toml
+│   │   └── src/
+│   │       ├── lib.rs
+│   │       ├── session.rs        # Session model
+│   │       ├── storage.rs        # File persistence
+│   │       ├── context.rs        # Context generation
+│   │       └── git.rs            # Git state capture
+│   └── pas-agent-cli/           # CLI binary
+│       ├── Cargo.toml
+│       ├── src/
+│       │   └── main.rs
+│       └── tests/
+│           └── cli.rs            # End-to-end CLI tests
+├── website/                      # Landing page + docs (Astro)
+│   └── DESIGN.md                 # Website design system
+├── .github/workflows/            # CI and release builds
+├── AGENTS.md                     # Contributor rules (CLAUDE.md imports it)
+└── CONTRIBUTING.md</code></pre>
+
+  <h2>Contributing</h2>
+  <p>
+    PAS-Agent is open source and welcomes contributions. Before submitting
+    a pull request:
+  </p>
+  <ol>
+    <li>Run <code>cargo test</code>: all tests must pass</li>
+    <li>Run <code>cargo clippy --all-targets -- -D warnings</code>: no warnings</li>
+    <li>Run <code>cargo fmt</code>: code must be formatted</li>
+    <li>Keep changes focused: one feature or fix per PR</li>
+  </ol>
+
+  <h2>License</h2>
+  <p>
+    PAS-Agent is licensed under the <strong>MIT License</strong>.
+  </p>
+</DocsLayout>

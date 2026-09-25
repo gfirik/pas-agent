@@ -1,0 +1,39 @@
+---
+import Head from '../components/Head.astro';
+import { SITE_DESCRIPTION } from '../data/site';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = SITE_DESCRIPTION } = Astro.props;
+---
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <Head title={title} description={description} />
+    <slot name="head" />
+  </head>
+  <body>
+    <a href="#main" class="skip-link">Skip to content</a>
+    <slot />
+    <script>
+      // Scroll-reveal for `.anim` elements. Without JS (or with reduced motion)
+      // the CSS leaves them visible, so nothing depends on this running.
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('visible');
+              observer.unobserve(entry.target);
+            }
+          });
+        },
+        { threshold: 0.1, rootMargin: '0px 0px -40px 0px' }
+      );
+      document.querySelectorAll('.anim').forEach((el) => observer.observe(el));
+    </script>
+  </body>
+</html>

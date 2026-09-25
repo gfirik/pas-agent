@@ -1,0 +1,101 @@
+---
+import DocsLayout from '../../layouts/DocsLayout.astro';
+---
+<DocsLayout title="Quick Start" activeSlug="quick-start" description="Initialize a PAS-Agent session, record progress, save a checkpoint, and export context for the next AI coding agent.">
+  <h1>Quick Start</h1>
+
+  <p>
+    This guide walks through the basic PAS-Agent workflow:
+    initialize a session, record progress, and export context for another agent.
+  </p>
+
+  <h2>1. Initialize a Session</h2>
+  <p>
+    Run <code>init</code> anywhere inside your project. Inside a git repository, the
+    session is created at the repository root:
+  </p>
+  <pre><code>$ cd my-project
+$ pas-agent init --task "Implement user authentication"
+PAS-Agent session initialized.
+  Project: my-project
+  Session: 46d89609-104d-4a43-907d-dbca99704a85
+  Store:   /home/me/my-project/.pas-agent/session.json
+  Git:     main @ abc1234d
+
+Tip: commit .pas-agent/ to carry the session across machines, or add it to .gitignore to keep it local.</code></pre>
+  <p>
+    This creates <code>.pas-agent/session.json</code>. Every other command finds it
+    from any subdirectory of the project.
+  </p>
+
+  <h2>2. Update Session State</h2>
+  <p>
+    As you work, record progress. List flags can be repeated, and each value is one
+    item, so items can contain commas:
+  </p>
+  <pre><code>$ pas-agent update \
+    --completed "Created login endpoint" \
+    --completed "Added password hashing" \
+    --remaining "Add token refresh" \
+    --remaining "Write tests" \
+    --next "Implement token refresh endpoint" \
+    --decision "Use bcrypt, not argon2, to match the legacy service"</code></pre>
+  <p>When a remaining item is finished, mark it done by its number from <code>status</code>:</p>
+  <pre><code>$ pas-agent update --done 1 --next "Write tests"</code></pre>
+
+  <h2>3. Save a Checkpoint</h2>
+  <p>
+    Save a snapshot of your progress at meaningful milestones. This also records the
+    git state and the files with uncommitted changes:
+  </p>
+  <pre><code>$ pas-agent checkpoint "Completed login endpoint and password hashing"
+Checkpoint #1 saved: Completed login endpoint and password hashing
+  Files with uncommitted changes: 4</code></pre>
+
+  <h2>4. Check Status</h2>
+  <pre><code>$ pas-agent status
+Project:   my-project
+...
+Task:      Implement user authentication
+Next:      Write tests
+
+Completed (3):
+   1. Created login endpoint
+   2. Added password hashing
+   3. Add token refresh
+
+Remaining (1):
+   1. Write tests
+
+Git:       main @ abc1234d (uncommitted changes)
+
+Checkpoints: 1</code></pre>
+
+  <h2>5. Export for Another Agent</h2>
+  <p>
+    Write the context into the file the next agent reads at startup:
+  </p>
+  <pre><code>$ pas-agent export --to codex
+Created /home/me/my-project/AGENTS.md for codex.
+codex reads AGENTS.md from the project root at session start.</code></pre>
+  <p>
+    If <code>AGENTS.md</code> already exists, PAS-Agent adds its own marked block and
+    leaves the rest of the file untouched. Later exports replace only that block.
+  </p>
+
+  <h2>6. Continue in the Next Agent</h2>
+  <p>
+    Start the next agent in the same project. It loads the exported file at startup
+    and sees your task, progress, and decisions.
+  </p>
+
+  <h2>Full Workflow</h2>
+  <pre><code># Working in Claude Code
+$ pas-agent init --task "Add user auth"
+$ pas-agent update --completed "Login endpoint done" --next "Token refresh"
+$ pas-agent checkpoint "Login complete"
+
+# Switch to Codex
+$ pas-agent export --to codex
+$ codex  # reads AGENTS.md at startup</code></pre>
+</DocsLayout>
