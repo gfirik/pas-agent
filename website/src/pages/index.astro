@@ -262,7 +262,7 @@ const steps = [
           <div class="value-card">
             <span class="value-card-icon text-mono-xs color-accent">03</span>
             <h3 class="text-subheading mt-20">Single small binary</h3>
-            <p class="text-body-sm color-muted mt-12">About 1.7 MB, built with cargo. Git is the only thing it needs at runtime. Tested on Linux; macOS and Windows builds are not yet verified.</p>
+            <p class="text-body-sm color-muted mt-12">About 1.7 MB, built with cargo. Git is the only thing it needs at runtime. Tested on Linux, macOS, and Windows.</p>
           </div>
         </div>
       </div>
@@ -280,8 +280,9 @@ const steps = [
               <span class="faq-icon text-subheading" aria-hidden="true"></span>
             </summary>
             <div class="faq-answer">
-              <pre class="text-mono-sm faq-code">cargo install --git {GITHUB_URL} pas-agent-cli</pre>
-              <p class="text-body-sm color-muted mt-12">Requires Rust 1.85 or later and git. This installs the <code>pas-agent</code> binary.</p>
+              <p class="text-body-sm color-muted">Download a prebuilt binary for Linux, macOS, or Windows from the <a href={`${GITHUB_URL}/releases/latest`} target="_blank" rel="noopener">latest release</a>, or build it with Cargo (Rust 1.85 or later):</p>
+              <pre class="text-mono-sm faq-code mt-12">cargo install --git {GITHUB_URL} pas-agent-cli</pre>
+              <p class="text-body-sm color-muted mt-12">Either way you get a single <code>pas-agent</code> binary. It needs git at runtime.</p>
             </div>
           </details>
           <details class="faq-details border-b">

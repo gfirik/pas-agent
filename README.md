@@ -6,8 +6,9 @@
 
 **Portable Agent Sessions: carry your work from one AI coding agent to the next.**
 
-Start a task in Claude Code, pick it up in Codex, finish it in Cursor. PAS-Agent keeps a
-small, local record of the task, the progress, and the decisions. It writes that record into
+Start a task in Claude Code, hit a usage limit or want a second opinion, and continue the
+*same* task in Codex, Cursor or Gemini CLI. PAS-Agent keeps a small, local record of the
+task, the progress, and the decisions. It writes that record into
 the instruction file the next agent already reads at startup, so you don't have to
 re-explain everything.
 
@@ -130,9 +131,11 @@ Run `pas-agent <command> --help` for every flag, or see the
 
 ## Roadmap
 
-- **Now (Phase 1):** manual CLI workflow.
-- **Next (Phase 2):** shell hooks that update and export automatically when you switch agents.
-- **Later:** optional AI-assisted summarisation of what happened in a session.
+- [x] Portable, versioned session format with checkpoints and git state capture
+- [x] Non-destructive export for Claude Code, Codex, OpenCode, Cursor, Kiro CLI, Antigravity and Gemini CLI
+- [x] Prebuilt binaries for Linux, macOS and Windows
+- [ ] Shell hooks that update and export automatically when you switch agents
+- [ ] Optional AI-assisted summary of what happened in a session
 
 ## Contributing
 

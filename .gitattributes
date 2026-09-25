@@ -1,2 +1,3 @@
-# Keep GitHub language stats about the Rust code, not the website.
+# Keep GitHub language stats about the Rust code, not the website or demo tooling.
 website/** linguist-documentation
+assets/** linguist-documentation
