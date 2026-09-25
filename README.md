@@ -75,6 +75,10 @@ pas-agent export --to codex               # writes AGENTS.md
 codex                                     # reads it at startup
 ```
 
+Agents read their instruction file only when a session **starts**, so export *before* you
+launch the next agent. If it's already running, restart it or ask it to read `AGENTS.md`.
+You can also skip the terminal: ask the agent itself to run `pas-agent init` in the chat.
+
 ### Let the agent do it
 
 `pas-agent` is an ordinary command, so your agent can keep the session up to date itself. Add

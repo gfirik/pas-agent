@@ -1,5 +1,5 @@
 export const SITE_NAME = 'PAS-Agent';
-export const SITE_DESCRIPTION = 'Portable work sessions across AI coding agents.';
+export const SITE_DESCRIPTION = 'PAS-Agent (Portable Agent Sessions) carries your task, progress and decisions from one AI coding agent to the next: Claude Code, Codex, Cursor, Gemini CLI and more.';
 export const GITHUB_URL = 'https://github.com/gfirik/pas-agent';
 
 export interface DocPage {

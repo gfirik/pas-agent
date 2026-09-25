@@ -11,6 +11,31 @@ import { withBase } from '../../data/site';
     no effort.
   </p>
 
+  <h2>Your First Session</h2>
+  <p>
+    One rule explains when to run what: <strong>agents read their instruction file
+    (<code>CLAUDE.md</code>, <code>AGENTS.md</code>, <code>GEMINI.md</code>) once, when a session
+    starts.</strong> So export <em>before</em> you launch an agent.
+  </p>
+  <h3>Set up first, then start the agent</h3>
+  <pre><code>$ cd my-project
+$ pas-agent init --task "Add Stripe billing"
+$ pas-agent export --to claude    # writes CLAUDE.md
+$ claude                          # starts already knowing the task</code></pre>
+  <h3>Or start from inside a running agent</h3>
+  <p>
+    <code>pas-agent</code> is an ordinary command, so the agent can create the session itself.
+    Type this in the chat:
+  </p>
+  <blockquote>
+    <p>Run <code>pas-agent init --task "Add Stripe billing"</code> and keep the session updated with <code>pas-agent update</code> as you work.</p>
+  </blockquote>
+  <h3>If you exported while an agent was already running</h3>
+  <p>
+    It won't notice the new file on its own. Restart the agent (most reliable), or tell it:
+    <em>"read AGENTS.md and continue the task from the PAS-Agent session context"</em>.
+  </p>
+
   <h2>Let the Agent Keep the Session Up to Date</h2>
   <p>
     <code>pas-agent</code> is an ordinary command, so any coding agent that can run shell
