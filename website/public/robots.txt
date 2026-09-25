@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://pas-agent.dev/sitemap.xml
+Sitemap: https://gfirik.github.io/pas-agent/sitemap.xml

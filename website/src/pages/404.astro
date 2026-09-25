@@ -1,5 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+import { withBase } from '../data/site';
 ---
 <BaseLayout title="Page not found · PAS-Agent" description="This page doesn't exist.">
   <main id="main" class="not-found">
@@ -8,8 +9,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       <h1 class="text-heading-lg">This page doesn't exist.</h1>
       <p class="text-body color-muted">It may have moved, or the link may be wrong.</p>
       <div class="not-found-actions">
-        <a href="/" class="btn btn-primary">Home</a>
-        <a href="/docs/introduction" class="btn btn-ghost">Read the docs</a>
+        <a href={withBase('/')} class="btn btn-primary">Home</a>
+        <a href={withBase('/docs/introduction')} class="btn btn-ghost">Read the docs</a>
       </div>
     </div>
   </main>

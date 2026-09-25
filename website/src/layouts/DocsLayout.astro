@@ -1,6 +1,6 @@
 ---
 import Head from '../components/Head.astro';
-import { docPages, docSections, GITHUB_URL } from '../data/site';
+import { docPages, docSections, GITHUB_URL, withBase } from '../data/site';
 import '../styles/global.css';
 
 interface Props {
@@ -25,7 +25,7 @@ const nextPage = activeIndex !== -1 && activeIndex < docPages.length - 1 ? docPa
 
     <nav class="docs-topbar" aria-label="Main navigation">
       <div class="docs-topbar-inner">
-        <a href="/" class="docs-logo">
+        <a href={withBase('/')} class="docs-logo">
           <span class="docs-logo-mark" aria-hidden="true">PA</span>
           PAS-Agent
         </a>
@@ -35,10 +35,10 @@ const nextPage = activeIndex !== -1 && activeIndex < docPages.length - 1 ? docPa
           </svg>
         </button>
         <div class="docs-topbar-links">
-          <a href="/">Home</a>
-          <a href="/docs/introduction" class="active">Docs</a>
+          <a href={withBase('/')}>Home</a>
+          <a href={withBase('/docs/introduction')} class="active">Docs</a>
           <a href={GITHUB_URL} target="_blank" rel="noopener">GitHub</a>
-          <a href="/docs/installation" class="docs-topbar-cta">Get Started</a>
+          <a href={withBase('/docs/installation')} class="docs-topbar-cta">Get Started</a>
         </div>
       </div>
     </nav>
@@ -52,7 +52,7 @@ const nextPage = activeIndex !== -1 && activeIndex < docPages.length - 1 ? docPa
               {section.items.map((item) => (
                 <li>
                   <a
-                    href={`/docs/${item.slug}`}
+                    href={withBase(`/docs/${item.slug}`)}
                     class:list={['docs-sidebar-link', { active: activeSlug === item.slug }]}
                     aria-current={activeSlug === item.slug ? 'page' : undefined}
                   >
@@ -70,13 +70,13 @@ const nextPage = activeIndex !== -1 && activeIndex < docPages.length - 1 ? docPa
           <slot />
           <div class="docs-nav-links">
             {prevPage ? (
-              <a href={`/docs/${prevPage.slug}`} class="docs-nav-link prev">
+              <a href={withBase(`/docs/${prevPage.slug}`)} class="docs-nav-link prev">
                 <span class="nav-dir">Previous</span>
                 <span class="nav-label">{prevPage.label}</span>
               </a>
             ) : <div></div>}
             {nextPage ? (
-              <a href={`/docs/${nextPage.slug}`} class="docs-nav-link next">
+              <a href={withBase(`/docs/${nextPage.slug}`)} class="docs-nav-link next">
                 <span class="nav-dir">Next</span>
                 <span class="nav-label">{nextPage.label}</span>
               </a>

@@ -1,5 +1,6 @@
 ---
 import DocsLayout from '../../layouts/DocsLayout.astro';
+import { withBase } from '../../data/site';
 ---
 <DocsLayout title="CLI Reference" activeSlug="cli-reference" description="Reference for every pas-agent command and flag: init, update, remove, checkpoint, status, list, and export.">
   <h1>CLI Reference</h1>
@@ -77,7 +78,7 @@ Options:
   -o, --output &lt;PATH&gt;   Output file (defaults to CLAUDE.md, AGENTS.md or GEMINI.md in the project root)
       --force           Replace the whole file instead of only the PAS-Agent block</code></pre>
   <p>
-    Unknown targets are rejected. See <a href="/docs/portable-state">Portable State</a>
+    Unknown targets are rejected. See <a href={withBase('/docs/portable-state')}>Portable State</a>
     for how the block is written.
   </p>
 

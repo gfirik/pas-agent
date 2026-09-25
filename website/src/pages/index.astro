@@ -1,6 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { GITHUB_URL } from '../data/site';
+import { GITHUB_URL, withBase } from '../data/site';
 
 // Intro curtain: each word's initial is kept, the rest collapses away to leave "PAS".
 const introWords = ['PORTABLE', 'AGENT', 'SESSIONS'];
@@ -91,17 +91,17 @@ const steps = [
   <nav class="nav border-b" aria-label="Main navigation">
     <div class="container nav-inner">
       <div class="nav-left">
-        <a href="/" class="nav-logo">
+        <a href={withBase('/')} class="nav-logo">
           <span class="nav-logo-mark bg-ink" aria-hidden="true">PA</span>
           <span class="text-body-sm font-medium">PAS-Agent</span>
         </a>
         <div class="nav-links">
-          <a href="/docs/introduction" class="text-body-sm">Docs</a>
+          <a href={withBase('/docs/introduction')} class="text-body-sm">Docs</a>
           <a href={GITHUB_URL} class="text-body-sm" target="_blank" rel="noopener">GitHub</a>
         </div>
       </div>
       <div class="nav-right">
-        <a href="/docs/installation" class="btn btn-primary">Get Started ↗</a>
+        <a href={withBase('/docs/installation')} class="btn btn-primary">Get Started ↗</a>
       </div>
     </div>
   </nav>
@@ -120,7 +120,7 @@ const steps = [
               Start a task in Claude Code, pick it up in Codex, finish it in Cursor. PAS-Agent keeps a portable record of the task, decisions, and progress, so switching agents doesn't mean starting over.
             </p>
             <div class="hero-actions anim anim-delay-2">
-              <a href="/docs/installation" class="btn btn-primary">Install PAS-Agent ↗</a>
+              <a href={withBase('/docs/installation')} class="btn btn-primary">Install PAS-Agent ↗</a>
               <a href={GITHUB_URL} class="btn btn-ghost" target="_blank" rel="noopener">View on GitHub</a>
             </div>
           </div>
@@ -132,7 +132,7 @@ const steps = [
     <section class="section border-b">
       <div class="container section-pad anim anim-delay-3">
         <div class="landscape-box">
-          <div class="landscape-bg" style="background-image: url('/images/mountains.webp');"></div>
+          <div class="landscape-bg" style={`background-image: url('${withBase('/images/mountains.webp')}');`}></div>
           <div class="landscape-inner">
             <div class="code-window bg-ink radius-sm">
               <div class="code-header">
@@ -328,7 +328,7 @@ const steps = [
     <section class="section border-b">
       <div class="container section-pad anim">
         <div class="landscape-box landscape-box-short" role="img" aria-label="Mountain landscape in the Dolomites">
-          <div class="landscape-bg" style="background-image: url('/images/dolomites.webp');"></div>
+          <div class="landscape-bg" style={`background-image: url('${withBase('/images/dolomites.webp')}');`}></div>
         </div>
       </div>
     </section>
@@ -339,7 +339,7 @@ const steps = [
         <h2 class="text-heading-lg anim">Start where the last agent <span class="mark">stopped</span>.</h2>
         <p class="text-body color-muted anim anim-delay-1 mt-20 max-w-prose">Install PAS-Agent, initialize a session, and hand off context in one command.</p>
         <div class="hero-actions anim anim-delay-2 mt-40">
-          <a href="/docs/installation" class="btn btn-primary">Get Started ↗</a>
+          <a href={withBase('/docs/installation')} class="btn btn-primary">Get Started ↗</a>
           <a href={GITHUB_URL} class="btn btn-ghost" target="_blank" rel="noopener">View on GitHub</a>
         </div>
       </div>
@@ -354,7 +354,7 @@ const steps = [
         <span class="text-body-sm font-medium">PAS-Agent</span>
       </div>
       <div class="footer-links">
-        <a href="/docs/introduction" class="text-mono-xs color-muted">Docs</a>
+        <a href={withBase('/docs/introduction')} class="text-mono-xs color-muted">Docs</a>
         <a href={GITHUB_URL} class="text-mono-xs color-muted" target="_blank" rel="noopener">GitHub</a>
       </div>
       <div class="text-mono-xs color-muted">Portable Agent Sessions · MIT License · Photos: Unsplash</div>

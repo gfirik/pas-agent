@@ -35,3 +35,8 @@ export const docSections: { title: string; items: DocPage[] }[] = [
 ];
 
 export const docPages: DocPage[] = docSections.flatMap((s) => s.items);
+
+/** Prefixes a root-relative path with the deploy base (e.g. `/pas-agent` on GitHub Pages). */
+export function withBase(path: string): string {
+  return import.meta.env.BASE_URL.replace(/\/$/, '') + path;
+}

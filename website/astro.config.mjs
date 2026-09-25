@@ -1,10 +1,11 @@
 import { defineConfig } from 'astro/config';
 
 export default defineConfig({
-  site: 'https://pas-agent.dev',
+  site: 'https://gfirik.github.io',
+  base: '/pas-agent',
   output: 'static',
   redirects: {
-    '/docs': '/docs/introduction',
+    '/docs': '/pas-agent/docs/introduction',
   },
   markdown: {
     shikiConfig: {

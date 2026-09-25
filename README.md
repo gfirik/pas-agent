@@ -14,6 +14,8 @@ re-explain everything.
 > **Status: alpha.** The CLI works end to end, but the session format and commands may still change
 > before 1.0.
 
+**Website and docs:** [gfirik.github.io/pas-agent](https://gfirik.github.io/pas-agent/)
+
 ![A PAS-Agent session: init, update, checkpoint, then export to Codex](assets/demo.gif)
 
 ```text
@@ -123,7 +125,8 @@ changes to `.pas-agent/` the same way you'd review changes to `CLAUDE.md`.
 | `list` | List checkpoints |
 | `export --to <agent>` | Write context for the next agent |
 
-Run `pas-agent <command> --help` for every flag.
+Run `pas-agent <command> --help` for every flag, or see the
+[CLI reference](https://gfirik.github.io/pas-agent/docs/cli-reference/).
 
 ## Roadmap
 
