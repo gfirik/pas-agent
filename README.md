@@ -86,7 +86,7 @@ If you kept editing (or committed) after your last checkpoint, `status` and `exp
     src/auth/hash.rs (untracked)
 ```
 
-`export` still goes ahead, and adds a **Changed Since Last Checkpoint** section to the context
+Editing a file again after the checkpoint counts too. `export` still goes ahead, and adds a **Changed Since Last Checkpoint** section to the context
 file so the next agent knows the checkpoint isn't fully current.
 
 ### Let the agent do it
@@ -153,7 +153,7 @@ changes to `.pas-agent/` the same way you'd review changes to `CLAUDE.md`.
 | `checkpoint [msg]` | Snapshot task state, git state and changed files |
 | `status` | Show the session with numbered lists; warns if changes came after the last checkpoint |
 | `list` | List checkpoints |
-| `export --to <agent>` | Write context for the next agent |
+| `export --to <agent>` | Write context for the next agent; warns and adds a "Changed Since Last Checkpoint" section if the checkpoint is out of date |
 
 Run `pas-agent <command> --help` for every flag, or see the
 [CLI reference](https://gfirik.github.io/pas-agent/docs/cli-reference/).

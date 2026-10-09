@@ -1,4 +1,6 @@
 use crate::session::{FileState, FileStatus, GitRef};
+use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -35,9 +37,84 @@ pub fn capture_git_state(project_dir: &Path) -> Option<GitRef> {
     })
 }
 
-/// Lists files with uncommitted changes (staged, unstaged and untracked).
+/// Returns the HEAD commit: `None` outside a git work tree, `Some(None)` when the
+/// repository has no commits yet. Cheaper than [`capture_git_state`], which also scans
+/// the work tree.
+#[must_use]
+pub fn head_commit(project_dir: &Path) -> Option<Option<String>> {
+    if !is_git_repo(project_dir) {
+        return None;
+    }
+    Some(
+        run_git(project_dir, &["rev-parse", "--verify", "--quiet", "HEAD"])
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
+    )
+}
+
+/// Files larger than this are fingerprinted by size alone.
+const MAX_HASHED_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Stable (version-independent) fingerprint of a file's content, as stored in
+/// `session.json`. `None` when the file cannot be read.
+fn fingerprint(path: &Path) -> Option<String> {
+    let meta = fs::symlink_metadata(path).ok()?;
+    if meta.file_type().is_symlink() {
+        let target = fs::read_link(path).ok()?;
+        return Some(format!(
+            "link:{:016x}",
+            fnv1a(target.to_string_lossy().as_bytes())
+        ));
+    }
+    if !meta.is_file() {
+        return None;
+    }
+    if meta.len() > MAX_HASHED_BYTES {
+        return Some(format!("size:{}", meta.len()));
+    }
+    let mut file = fs::File::open(path).ok()?;
+    let mut hash = FNV_OFFSET;
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf).ok()?;
+        if n == 0 {
+            break;
+        }
+        hash = fnv1a_update(hash, &buf[..n]);
+    }
+    Some(format!("{hash:016x}"))
+}
+
+const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+
+fn fnv1a(bytes: &[u8]) -> u64 {
+    fnv1a_update(FNV_OFFSET, bytes)
+}
+
+fn fnv1a_update(mut hash: u64, bytes: &[u8]) -> u64 {
+    for &b in bytes {
+        hash ^= u64::from(b);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    hash
+}
+
+/// Lists files with uncommitted changes (staged, unstaged and untracked), each with a
+/// content fingerprint.
 #[must_use]
 pub fn get_changed_files(project_dir: &Path) -> Vec<FileState> {
+    // Porcelain paths are relative to the work-tree root, which can sit above `project_dir`.
+    let root = git_toplevel(project_dir).unwrap_or_else(|| project_dir.to_path_buf());
+    let mut files = list_changed_files(project_dir);
+    for file in &mut files {
+        if file.status != FileStatus::Deleted {
+            file.fingerprint = fingerprint(&root.join(&file.path));
+        }
+    }
+    files
+}
+
+fn list_changed_files(project_dir: &Path) -> Vec<FileState> {
     run_git(
         project_dir,
         &[
@@ -97,6 +174,7 @@ fn parse_porcelain_z(output: &str) -> Vec<FileState> {
         files.push(FileState {
             path: path.to_string(),
             status,
+            fingerprint: None,
         });
     }
 
@@ -110,6 +188,8 @@ fn is_git_repo(dir: &Path) -> bool {
 /// Runs git and returns stdout, or `None` if git is missing or exits non-zero.
 fn run_git(dir: &Path, args: &[&str]) -> Option<String> {
     let output = Command::new("git")
+        // Read-only queries must not take the index lock and race the user's own git.
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .args(args)
         .current_dir(dir)
         .output()
@@ -191,26 +271,41 @@ mod tests {
 
         let mut files = get_changed_files(p);
         files.sort_by(|a, b| a.path.cmp(&b.path));
+        // Every non-deleted file carries a fingerprint; deleted files have none.
+        for f in &files {
+            assert_eq!(
+                f.fingerprint.is_none(),
+                f.status == FileStatus::Deleted,
+                "{f:?}"
+            );
+        }
+        for f in &mut files {
+            f.fingerprint = None;
+        }
         assert_eq!(
             files,
             vec![
                 FileState {
                     path: "fresh.txt".into(),
-                    status: FileStatus::Untracked
+                    status: FileStatus::Untracked,
+                    fingerprint: None,
                 },
                 FileState {
                     path: "gone.txt".into(),
-                    status: FileStatus::Deleted
+                    status: FileStatus::Deleted,
+                    fingerprint: None,
                 },
                 FileState {
                     path: "keep.txt".into(),
-                    status: FileStatus::Modified
+                    status: FileStatus::Modified,
+                    fingerprint: None,
                 },
                 FileState {
                     path: "new name.txt".into(),
                     status: FileStatus::Renamed {
                         from: "old.txt".into()
                     },
+                    fingerprint: None,
                 },
             ]
         );
@@ -225,5 +320,31 @@ mod tests {
         fs::create_dir(p.join(".pas-agent")).unwrap();
         fs::write(p.join(".pas-agent/session.json"), "{}").unwrap();
         assert!(!capture_git_state(p).unwrap().dirty);
+    }
+
+    #[test]
+    fn test_fingerprint_changes_with_content_and_is_stable() {
+        let dir = TempDir::new().unwrap();
+        let p = dir.path();
+        git(p, &["init", "-q"]);
+        fs::write(p.join("a.txt"), "one").unwrap();
+        let first = get_changed_files(p)[0].fingerprint.clone().unwrap();
+        assert_eq!(get_changed_files(p)[0].fingerprint.as_ref(), Some(&first));
+        // Pinned so a change to the algorithm (which would invalidate stored checkpoints)
+        // is a deliberate decision.
+        assert_eq!(first, "1a08aa1921ca5caf");
+        fs::write(p.join("a.txt"), "two").unwrap();
+        assert_ne!(get_changed_files(p)[0].fingerprint.as_ref(), Some(&first));
+    }
+
+    #[test]
+    fn test_head_commit_states() {
+        let dir = TempDir::new().unwrap();
+        let p = dir.path();
+        assert_eq!(head_commit(p), None);
+        git(p, &["init", "-q"]);
+        assert_eq!(head_commit(p), Some(None));
+        git(p, &["commit", "-q", "--allow-empty", "-m", "c"]);
+        assert_eq!(head_commit(p).unwrap().unwrap().len(), 40);
     }
 }

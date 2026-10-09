@@ -52,8 +52,11 @@ Checkpoints for my-project (3):
   <p>
     A checkpoint is a snapshot, so edits made afterwards are not in it. PAS-Agent compares the
     current git commit and changed files with the latest checkpoint. The checkpoint counts as
-    stale if the commit differs, or a file is new, no longer changed, or has a different status.
-    Context files that <code>pas-agent export</code> wrote are ignored in this comparison.
+    stale if the commit differs, or a file is new, no longer changed, has a different status, or
+    was edited again (each changed file is stored with a fingerprint of its content). Context
+    files that <code>pas-agent export</code> wrote, meaning files holding a complete PAS-Agent
+    block, are ignored in this comparison. After a commit that only moves HEAD, the warning
+    reads <code>HEAD moved</code> instead of counting files.
   </p>
   <pre><code>$ pas-agent status
 ...
@@ -66,11 +69,14 @@ Checkpoints for my-project (3):
     context file gets a short section so the next agent knows the checkpoint is not current:
   </p>
   <pre><code>## Changed Since Last Checkpoint
-The last checkpoint (2026-10-09 14:20 UTC) is out of date, so the sections above may miss recent work. These changes were made after it:
-- `src/auth/hash.rs` (untracked)</code></pre>
+The working tree has moved on since the last checkpoint (2026-10-09 14:20 UTC), so the sections above may be out of date:
+- `src/auth/hash.rs` (untracked)
+- `src/old.rs` (no longer changed)</code></pre>
   <p>
-    Run <code>pas-agent checkpoint</code> to clear the warning. The list is capped at 50 files,
-    and nothing extra is stored in <code>session.json</code>. There is no warning before the
+    Run <code>pas-agent checkpoint</code> to clear the warning. The list is capped at 50 files.
+    Each file entry in a checkpoint gains an optional <code>fingerprint</code> field in
+    <code>session.json</code>; checkpoints saved by older versions simply have none and are
+    compared by path and status only. There is no warning before the
     first checkpoint or outside a git repository.
   </p>
 
