@@ -6,6 +6,7 @@ use pas_agent_core::{
     SessionError, SessionLock, SessionStore, Staleness, TaskState, WriteOutcome, STORE_DIR,
 };
 use std::collections::BTreeSet;
+use std::fs;
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process;
@@ -270,32 +271,39 @@ fn print_numbered(heading: &str, items: &[String]) {
     }
 }
 
-/// Finds the session for the current directory or one of its parents.
-fn open_session(cwd: &Path) -> Result<(SessionStore, Session)> {
-    let Some(store) = SessionStore::discover(cwd) else {
-        return Err(format!(
+/// Finds the session store for the current directory or one of its parents.
+fn discover_store(cwd: &Path) -> Result<SessionStore> {
+    SessionStore::discover(cwd).ok_or_else(|| {
+        format!(
             "no PAS-Agent session found in {} or any parent directory; run `pas-agent init` first",
             cwd.display()
         )
-        .into());
-    };
+        .into()
+    })
+}
+
+/// Finds and loads the session for the current directory or one of its parents.
+fn open_session(cwd: &Path) -> Result<(SessionStore, Session)> {
+    let store = discover_store(cwd)?;
     let session = store.load()?;
     Ok((store, session))
 }
 
 /// Like [`open_session`], but holds the session lock until the returned guard is dropped,
-/// so concurrent `pas-agent` processes cannot overwrite each other's changes.
-fn open_session_locked(cwd: &Path) -> Result<(SessionStore, Session, SessionLock)> {
-    let Some(store) = SessionStore::discover(cwd) else {
-        return Err(format!(
-            "no PAS-Agent session found in {} or any parent directory; run `pas-agent init` first",
-            cwd.display()
-        )
-        .into());
-    };
+/// so concurrent `pas-agent` processes cannot overwrite each other's changes. Take the
+/// lock only after slow work (git, prompts) is done, and release it before more of it.
+fn open_session_locked(store: &SessionStore) -> Result<(Session, SessionLock)> {
     let lock = store.lock()?;
     let session = store.load()?;
-    Ok((store, session, lock))
+    Ok((session, lock))
+}
+
+fn session_exists(store: &SessionStore) -> Box<dyn std::error::Error> {
+    format!(
+        "a PAS-Agent session already exists at {}",
+        store.session_path().display()
+    )
+    .into()
 }
 
 fn run() -> Result<()> {
@@ -306,15 +314,8 @@ fn run() -> Result<()> {
         Commands::Init { name, task } => {
             let root = SessionStore::init_root(&cwd);
             let store = SessionStore::new(&root);
-            let already_exists = || -> Result<()> {
-                Err(format!(
-                    "a PAS-Agent session already exists at {}",
-                    store.session_path().display()
-                )
-                .into())
-            };
             if store.exists() {
-                return already_exists();
+                return Err(session_exists(&store));
             }
 
             let project_name = name.unwrap_or_else(|| {
@@ -333,7 +334,7 @@ fn run() -> Result<()> {
             // Re-check under the lock so two concurrent `init`s cannot both succeed.
             let _lock = store.lock()?;
             if store.exists() {
-                return already_exists();
+                return Err(session_exists(&store));
             }
             let mut session = Session::new(project_name.clone(), description);
             session.git = capture_git_state(&root);
@@ -353,7 +354,8 @@ fn run() -> Result<()> {
         }
 
         Commands::Checkpoint { message } => {
-            let (store, mut session, _lock) = open_session_locked(&cwd)?;
+            let store = discover_store(&cwd)?;
+            // Anything slow or interactive happens before the session lock is taken.
             let msg = if message.is_empty() {
                 prompt("Checkpoint message:")?
             } else {
@@ -362,10 +364,12 @@ fn run() -> Result<()> {
             if msg.is_empty() {
                 return Err("checkpoint message cannot be empty".into());
             }
-
-            session.git = capture_git_state(store.project_dir());
+            let git = capture_git_state(store.project_dir());
             let files = get_changed_files(store.project_dir());
             let file_count = files.len();
+
+            let (mut session, _lock) = open_session_locked(&store)?;
+            session.git = git;
             session.add_checkpoint(msg.clone(), files);
             store.save(&session)?;
 
@@ -451,26 +455,25 @@ fn run() -> Result<()> {
         }
 
         Commands::Export { to, output, force } => {
-            let (store, mut session, _lock) = open_session_locked(&cwd)?;
+            let store = discover_store(&cwd)?;
             let agent = Agent::from(to);
             let format = ContextFormat::for_agent(agent);
 
-            session.git = capture_git_state(store.project_dir());
-            store.save(&session)?;
+            let git = capture_git_state(store.project_dir());
+            // The lock covers only the load and save; the staleness check and the file
+            // write below can be slow and do not touch the session file.
+            let session = {
+                let (mut session, _lock) = open_session_locked(&store)?;
+                session.git = git;
+                store.save(&session)?;
+                session
+            };
 
             let stale = check_staleness(store.project_dir(), &session);
             if let Some(stale) = &stale {
                 print_staleness(stale, true);
             }
             let content = generate_context_with(&session, stale.as_ref());
-            if let Some(limit) = context_char_limit(agent) {
-                let size = content.chars().count();
-                if size > limit {
-                    eprintln!(
-                        "⚠ The exported context is {size} characters, but {agent} reads at most {limit} of a rules file, so the end may be cut off. Shorten it with `pas-agent remove <list> <N>`."
-                    );
-                }
-            }
             let out_path = output.unwrap_or_else(|| store.project_dir().join(format.filename()));
             let outcome = write_context_file(&out_path, &content, force)?;
 
@@ -484,6 +487,16 @@ fn run() -> Result<()> {
                     "Added a PAS-Agent block to {path} for {agent}; your existing content was kept."
                 ),
                 WriteOutcome::Overwritten => println!("Overwrote {path} for {agent}."),
+            }
+
+            // Measure the file as written: your own content outside the block counts too.
+            if let Some(limit) = context_char_limit(agent) {
+                let size = fs::read_to_string(&out_path).map_or(0, |t| t.chars().count());
+                if size > limit {
+                    eprintln!(
+                        "⚠ {path} is {size} characters, but {agent} reads at most {limit} of a rules file, so the end may be cut off. Shorten the session with `pas-agent remove <list> <N>`."
+                    );
+                }
             }
 
             let default_name = format.filename();
@@ -510,7 +523,9 @@ fn run() -> Result<()> {
             done,
             resolve,
         } => {
-            let (store, mut session, _lock) = open_session_locked(&cwd)?;
+            let store = discover_store(&cwd)?;
+            let git = capture_git_state(store.project_dir());
+            let (mut session, _lock) = open_session_locked(&store)?;
             let before = session.task.clone();
             let t = &mut session.task;
 
@@ -545,14 +560,15 @@ fn run() -> Result<()> {
                 return Err("nothing to update; see `pas-agent update --help`".into());
             }
 
-            session.git = capture_git_state(store.project_dir());
+            session.git = git;
             session.updated_at = Utc::now();
             store.save(&session)?;
             println!("Session updated.");
         }
 
         Commands::Remove { list, items } => {
-            let (store, mut session, _lock) = open_session_locked(&cwd)?;
+            let store = discover_store(&cwd)?;
+            let (mut session, _lock) = open_session_locked(&store)?;
             let removed = take_items(list.get(&mut session.task), &items, list.name())?;
             session.updated_at = Utc::now();
             store.save(&session)?;

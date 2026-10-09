@@ -3,7 +3,7 @@ use crate::session::{Session, SCHEMA_VERSION};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 /// Name of the per-project state directory.
@@ -37,9 +37,7 @@ pub enum SessionError {
         supported: u32,
     },
 
-    #[error(
-        "the session is locked by another pas-agent process ({0}); retry in a moment, or delete that file if no pas-agent is running"
-    )]
+    #[error("the session is locked by another pas-agent process ({0}); retry in a moment")]
     Locked(PathBuf),
 
     #[error(
@@ -59,21 +57,15 @@ impl SessionError {
 
 /// How long to wait for another `pas-agent` process to finish before giving up.
 const DEFAULT_LOCK_TIMEOUT: Duration = Duration::from_secs(5);
-/// A lock file older than this belongs to a crashed process and is taken over.
-const DEFAULT_LOCK_STALE_AFTER: Duration = Duration::from_secs(30);
 const LOCK_FILE: &str = "session.lock";
 
-/// Holds the session lock for as long as it lives, so a load-modify-save cycle is not
-/// interleaved with another process's.
+/// Holds an exclusive OS lock on `session.lock` for as long as it lives, so a
+/// load-modify-save cycle is not interleaved with another process's. The lock belongs to
+/// the open file, so the kernel releases it if the process crashes: there is no stale lock
+/// to clean up. The (empty) lock file itself is left in place on purpose.
 #[derive(Debug)]
 pub struct SessionLock {
-    path: PathBuf,
-}
-
-impl Drop for SessionLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
+    _file: fs::File,
 }
 
 fn env_millis(name: &str, default: Duration) -> Duration {
@@ -132,61 +124,44 @@ impl SessionStore {
         self.session_path().exists()
     }
 
-    /// Takes the session lock, waiting for other processes (up to
-    /// `PAS_AGENT_LOCK_TIMEOUT_MS`, default 5000). A lock left behind by a crashed process
-    /// is taken over after `PAS_AGENT_LOCK_STALE_MS` (default 30000).
+    /// Takes the session lock, waiting for other processes up to
+    /// `PAS_AGENT_LOCK_TIMEOUT_MS` (default 5000).
     pub fn lock(&self) -> Result<SessionLock, SessionError> {
-        self.lock_with(
-            env_millis("PAS_AGENT_LOCK_TIMEOUT_MS", DEFAULT_LOCK_TIMEOUT),
-            env_millis("PAS_AGENT_LOCK_STALE_MS", DEFAULT_LOCK_STALE_AFTER),
-        )
+        self.lock_with(env_millis(
+            "PAS_AGENT_LOCK_TIMEOUT_MS",
+            DEFAULT_LOCK_TIMEOUT,
+        ))
     }
 
-    fn lock_with(
-        &self,
-        timeout: Duration,
-        stale_after: Duration,
-    ) -> Result<SessionLock, SessionError> {
+    fn lock_with(&self, timeout: Duration) -> Result<SessionLock, SessionError> {
         fs::create_dir_all(&self.base_dir).map_err(|e| SessionError::io(&self.base_dir, e))?;
+        // The lock file stays on disk, so keep it out of a committed `.pas-agent/`.
+        let ignore = self.base_dir.join(".gitignore");
+        if !ignore.exists() {
+            let _ = fs::write(&ignore, format!("{LOCK_FILE}\n"));
+        }
+
         let path = self.base_dir.join(LOCK_FILE);
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&path)
+            .map_err(|e| SessionError::io(&path, e))?;
+
         let started = Instant::now();
         loop {
-            match fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&path)
-            {
-                Ok(mut file) => {
-                    let _ = write!(file, "{}", std::process::id());
-                    return Ok(SessionLock { path });
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    let age = fs::metadata(&path)
-                        .and_then(|m| m.modified())
-                        .ok()
-                        .and_then(|t| SystemTime::now().duration_since(t).ok());
-                    if age.is_some_and(|a| a >= stale_after) {
-                        // Rename first: only one of several waiting processes wins it.
-                        let claimed = path.with_extension(format!("stale.{}", std::process::id()));
-                        if fs::rename(&path, &claimed).is_ok() {
-                            let _ = fs::remove_file(&claimed);
-                        }
-                        continue;
-                    }
+            // Fully qualified: newer Rust has an inherent `File::try_lock` with a
+            // different error type, which would otherwise win over this trait method.
+            match fs4::FileExt::try_lock(&file) {
+                Ok(()) => return Ok(SessionLock { _file: file }),
+                Err(fs4::TryLockError::WouldBlock) => {
                     if started.elapsed() >= timeout {
                         return Err(SessionError::Locked(path));
                     }
                     std::thread::sleep(Duration::from_millis(20));
                 }
-                // On Windows, opening a file another process has just deleted (but not yet
-                // released) fails with "access denied"; that is contention, not a real error.
-                Err(e) if cfg!(windows) && e.kind() == std::io::ErrorKind::PermissionDenied => {
-                    if started.elapsed() >= timeout {
-                        return Err(SessionError::Locked(path));
-                    }
-                    std::thread::sleep(Duration::from_millis(20));
-                }
-                Err(e) => return Err(SessionError::io(&path, e)),
+                Err(fs4::TryLockError::Error(e)) => return Err(SessionError::io(&path, e)),
             }
         }
     }
@@ -403,30 +378,36 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let store = SessionStore::new(dir.path());
         let short = Duration::from_millis(60);
-        let first = store.lock_with(short, Duration::from_secs(60)).unwrap();
+        let first = store.lock_with(short).unwrap();
         assert!(matches!(
-            store.lock_with(short, Duration::from_secs(60)),
+            store.lock_with(short),
             Err(SessionError::Locked(_))
         ));
         drop(first);
-        assert!(store.lock_with(short, Duration::from_secs(60)).is_ok());
-        assert!(!store.base_dir().join(LOCK_FILE).exists());
+        assert!(store.lock_with(short).is_ok());
     }
 
     #[test]
-    fn test_stale_lock_is_taken_over() {
+    fn test_leftover_lock_file_does_not_block() {
+        // The lock belongs to the open file, not to the file's existence, so the file a
+        // crashed process left behind is just reused.
         let dir = TempDir::new().unwrap();
         let store = SessionStore::new(dir.path());
-        fs::create_dir_all(store.base_dir()).unwrap();
-        let lock_path = store.base_dir().join(LOCK_FILE);
-        let file = fs::File::create(&lock_path).unwrap();
-        file.set_modified(SystemTime::now() - Duration::from_secs(3600))
-            .unwrap();
-        drop(file);
-        let lock = store
-            .lock_with(Duration::from_millis(60), Duration::from_secs(30))
-            .unwrap();
-        drop(lock);
-        assert!(!lock_path.exists());
+        drop(store.lock_with(Duration::from_millis(60)).unwrap());
+        assert!(store.base_dir().join(LOCK_FILE).exists());
+        assert!(store.lock_with(Duration::from_millis(60)).is_ok());
+    }
+
+    #[test]
+    fn test_lock_file_is_gitignored_without_touching_an_existing_ignore() {
+        let dir = TempDir::new().unwrap();
+        let store = SessionStore::new(dir.path());
+        drop(store.lock_with(Duration::from_millis(60)).unwrap());
+        let ignore = store.base_dir().join(".gitignore");
+        assert_eq!(fs::read_to_string(&ignore).unwrap(), "session.lock\n");
+
+        fs::write(&ignore, "custom\n").unwrap();
+        drop(store.lock_with(Duration::from_millis(60)).unwrap());
+        assert_eq!(fs::read_to_string(&ignore).unwrap(), "custom\n");
     }
 }

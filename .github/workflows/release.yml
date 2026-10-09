@@ -66,7 +66,9 @@ jobs:
           echo hello > a.txt
           "$bin" checkpoint "first"
           echo changed >> a.txt
-          "$bin" status | grep -q "since the last checkpoint"
+          # Capture first: `grep -q` exiting early can SIGPIPE the writer under pipefail.
+          status=$("$bin" status)
+          grep -q "since the last checkpoint" <<<"$status"
           "$bin" export --to codex
           grep -q "Changed Since Last Checkpoint" AGENTS.md
 
