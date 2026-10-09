@@ -64,6 +64,10 @@ Lists: completed, remaining, decisions, blockers, constraints, discoveries</code
     Show the session: task, numbered lists, live git state, and the latest checkpoint.
   </p>
   <pre><code>pas-agent status</code></pre>
+  <p>
+    If files or the git commit changed after the latest checkpoint, it also prints a warning
+    and lists the affected paths. See <a href={withBase('/docs/checkpoints#stale-checkpoints')}>stale checkpoints</a>.
+  </p>
 
   <h2>pas-agent list</h2>
   <p>List all checkpoints with timestamp, message, file count, and commit.</p>

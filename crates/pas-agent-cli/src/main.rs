@@ -1,8 +1,9 @@
 use chrono::Utc;
 use clap::{Parser, Subcommand, ValueEnum};
 use pas_agent_core::{
-    capture_git_state, generate_context, get_changed_files, write_context_file, Agent,
-    ContextFormat, GitRef, Session, SessionError, SessionStore, TaskState, WriteOutcome, STORE_DIR,
+    capture_git_state, check_staleness, generate_context_with, get_changed_files,
+    write_context_file, Agent, ContextFormat, GitRef, Session, SessionError, SessionStore,
+    Staleness, TaskState, WriteOutcome, STORE_DIR,
 };
 use std::collections::BTreeSet;
 use std::io::{self, BufRead, Write};
@@ -245,6 +246,19 @@ fn describe_git(git: &GitRef) -> String {
     )
 }
 
+/// Prints the stale-checkpoint warning (to stderr for `export`, so stdout stays clean).
+fn print_staleness(stale: &Staleness, to_stderr: bool) {
+    let lines = std::iter::once(stale.headline())
+        .chain(stale.detail_lines().into_iter().map(|l| format!("    {l}")));
+    for line in lines {
+        if to_stderr {
+            eprintln!("{line}");
+        } else {
+            println!("{line}");
+        }
+    }
+}
+
 fn print_numbered(heading: &str, items: &[String]) {
     if items.is_empty() {
         return;
@@ -381,6 +395,10 @@ fn run() -> Result<()> {
                     cp.message
                 );
             }
+            if let Some(stale) = check_staleness(store.project_dir(), &session) {
+                println!();
+                print_staleness(&stale, false);
+            }
         }
 
         Commands::List => {
@@ -417,7 +435,11 @@ fn run() -> Result<()> {
             session.git = capture_git_state(store.project_dir());
             store.save(&session)?;
 
-            let content = generate_context(&session);
+            let stale = check_staleness(store.project_dir(), &session);
+            if let Some(stale) = &stale {
+                print_staleness(stale, true);
+            }
+            let content = generate_context_with(&session, stale.as_ref());
             let out_path = output.unwrap_or_else(|| store.project_dir().join(format.filename()));
             let outcome = write_context_file(&out_path, &content, force)?;
 
