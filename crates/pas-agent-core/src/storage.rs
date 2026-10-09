@@ -3,6 +3,7 @@ use crate::session::{Session, SCHEMA_VERSION};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 /// Name of the per-project state directory.
@@ -36,6 +37,9 @@ pub enum SessionError {
         supported: u32,
     },
 
+    #[error("the session is locked by another pas-agent process ({0}); retry in a moment")]
+    Locked(PathBuf),
+
     #[error(
         "{0} has a PAS-Agent start marker without a matching end marker (or vice versa); fix it by hand or re-run with --force"
     )]
@@ -49,6 +53,26 @@ impl SessionError {
             source,
         }
     }
+}
+
+/// How long to wait for another `pas-agent` process to finish before giving up.
+const DEFAULT_LOCK_TIMEOUT: Duration = Duration::from_secs(5);
+const LOCK_FILE: &str = "session.lock";
+
+/// Holds an exclusive OS lock on `session.lock` for as long as it lives, so a
+/// load-modify-save cycle is not interleaved with another process's. The lock belongs to
+/// the open file, so the kernel releases it if the process crashes: there is no stale lock
+/// to clean up. The (empty) lock file itself is left in place on purpose.
+#[derive(Debug)]
+pub struct SessionLock {
+    _file: fs::File,
+}
+
+fn env_millis(name: &str, default: Duration) -> Duration {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map_or(default, Duration::from_millis)
 }
 
 pub struct SessionStore {
@@ -98,6 +122,48 @@ impl SessionStore {
     #[must_use]
     pub fn exists(&self) -> bool {
         self.session_path().exists()
+    }
+
+    /// Takes the session lock, waiting for other processes up to
+    /// `PAS_AGENT_LOCK_TIMEOUT_MS` (default 5000).
+    pub fn lock(&self) -> Result<SessionLock, SessionError> {
+        self.lock_with(env_millis(
+            "PAS_AGENT_LOCK_TIMEOUT_MS",
+            DEFAULT_LOCK_TIMEOUT,
+        ))
+    }
+
+    fn lock_with(&self, timeout: Duration) -> Result<SessionLock, SessionError> {
+        fs::create_dir_all(&self.base_dir).map_err(|e| SessionError::io(&self.base_dir, e))?;
+        // The lock file stays on disk, so keep it out of a committed `.pas-agent/`.
+        let ignore = self.base_dir.join(".gitignore");
+        if !ignore.exists() {
+            let _ = fs::write(&ignore, format!("{LOCK_FILE}\n"));
+        }
+
+        let path = self.base_dir.join(LOCK_FILE);
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&path)
+            .map_err(|e| SessionError::io(&path, e))?;
+
+        let started = Instant::now();
+        loop {
+            // Fully qualified: newer Rust has an inherent `File::try_lock` with a
+            // different error type, which would otherwise win over this trait method.
+            match fs4::FileExt::try_lock(&file) {
+                Ok(()) => return Ok(SessionLock { _file: file }),
+                Err(fs4::TryLockError::WouldBlock) => {
+                    if started.elapsed() >= timeout {
+                        return Err(SessionError::Locked(path));
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                Err(fs4::TryLockError::Error(e)) => return Err(SessionError::io(&path, e)),
+            }
+        }
     }
 
     pub fn save(&self, session: &Session) -> Result<(), SessionError> {
@@ -305,5 +371,43 @@ mod tests {
             fs::read_to_string(dir.path().join("AGENTS.md")).unwrap(),
             "new"
         );
+    }
+
+    #[test]
+    fn test_lock_excludes_others_until_released() {
+        let dir = TempDir::new().unwrap();
+        let store = SessionStore::new(dir.path());
+        let short = Duration::from_millis(60);
+        let first = store.lock_with(short).unwrap();
+        assert!(matches!(
+            store.lock_with(short),
+            Err(SessionError::Locked(_))
+        ));
+        drop(first);
+        assert!(store.lock_with(short).is_ok());
+    }
+
+    #[test]
+    fn test_leftover_lock_file_does_not_block() {
+        // The lock belongs to the open file, not to the file's existence, so the file a
+        // crashed process left behind is just reused.
+        let dir = TempDir::new().unwrap();
+        let store = SessionStore::new(dir.path());
+        drop(store.lock_with(Duration::from_millis(60)).unwrap());
+        assert!(store.base_dir().join(LOCK_FILE).exists());
+        assert!(store.lock_with(Duration::from_millis(60)).is_ok());
+    }
+
+    #[test]
+    fn test_lock_file_is_gitignored_without_touching_an_existing_ignore() {
+        let dir = TempDir::new().unwrap();
+        let store = SessionStore::new(dir.path());
+        drop(store.lock_with(Duration::from_millis(60)).unwrap());
+        let ignore = store.base_dir().join(".gitignore");
+        assert_eq!(fs::read_to_string(&ignore).unwrap(), "session.lock\n");
+
+        fs::write(&ignore, "custom\n").unwrap();
+        drop(store.lock_with(Duration::from_millis(60)).unwrap());
+        assert_eq!(fs::read_to_string(&ignore).unwrap(), "custom\n");
     }
 }
