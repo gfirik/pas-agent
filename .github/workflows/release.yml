@@ -74,7 +74,7 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          name="pas-agent-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          name="pas-agent-${GITHUB_REF_NAME//\//-}-${{ matrix.target }}"
           mkdir "$name"
           cp "target/${{ matrix.target }}/release/pas-agent" README.md LICENSE "$name/"
           tar czf "$name.tar.gz" "$name"
@@ -84,7 +84,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $name = "pas-agent-$env:GITHUB_REF_NAME-${{ matrix.target }}"
+          $name = "pas-agent-$($env:GITHUB_REF_NAME -replace '/', '-')-${{ matrix.target }}"
           New-Item -ItemType Directory $name | Out-Null
           Copy-Item "target/${{ matrix.target }}/release/pas-agent.exe", README.md, LICENSE $name
           Compress-Archive $name "$name.zip"
