@@ -1,4 +1,4 @@
-use crate::session::{Agent, Session};
+use crate::session::{short_hash, Agent, Session};
 use crate::stale::Staleness;
 use crate::storage::{write_atomic, SessionError};
 use std::fmt::Write;
@@ -75,6 +75,47 @@ fn inline(text: &str) -> String {
     }
 }
 
+/// Renders text as an inline code span that cannot be broken out of: the fence is
+/// longer than any backtick run in the text. Used for file paths.
+fn code_span(text: &str) -> String {
+    let text = inline(text);
+    // Inside a code span a leading `#` is harmless, so drop the heading escape.
+    let text = text
+        .strip_prefix('\\')
+        .filter(|t| t.starts_with('#'))
+        .unwrap_or(&text);
+    let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
+    let fence = "`".repeat(longest + 1);
+    let pad = if text.starts_with('`') || text.ends_with('`') {
+        " "
+    } else {
+        ""
+    };
+    format!("{fence}{pad}{text}{pad}{fence}")
+}
+
+/// Byte offset of the first occurrence of `needle` that starts a line.
+fn find_at_line_start(text: &str, needle: &str) -> Option<usize> {
+    text.match_indices(needle)
+        .map(|(i, _)| i)
+        .find(|&i| i == 0 || text.as_bytes()[i - 1] == b'\n')
+}
+
+/// Locates the PAS-Agent block: `(start of the start marker, start of the end marker)`.
+/// Markers only count at the beginning of a line, so text that merely mentions them
+/// (source code, documentation, fenced examples) is not mistaken for a block.
+fn find_block(text: &str) -> (Option<usize>, Option<usize>) {
+    (
+        find_at_line_start(text, BLOCK_START_PREFIX),
+        find_at_line_start(text, BLOCK_END),
+    )
+}
+
+/// True if `text` holds a complete block written by `export`.
+pub(crate) fn contains_block(text: &str) -> bool {
+    matches!(find_block(text), (Some(start), Some(end)) if start < end)
+}
+
 fn write_list(out: &mut String, heading: &str, items: &[String]) {
     if items.is_empty() {
         return;
@@ -90,28 +131,18 @@ fn write_stale_section(out: &mut String, stale: &Staleness) {
     writeln!(out, "## Changed Since Last Checkpoint").unwrap();
     writeln!(
         out,
-        "The last checkpoint ({}) is out of date, so the sections above may miss recent work. \
-         These changes were made after it:",
+        "The working tree has moved on since the last checkpoint ({}), so the sections above \
+         may be out of date:",
         stale.checkpoint_time.format("%Y-%m-%d %H:%M UTC")
     )
     .unwrap();
     if let Some(summary) = stale.commit_summary() {
         writeln!(out, "- {}", inline(&summary)).unwrap();
     }
-    let entries = stale
-        .changed
-        .iter()
-        .map(|f| format!("`{}` ({})", inline(&f.path), inline(&f.status.to_string())))
-        .chain(
-            stale
-                .resolved
-                .iter()
-                .map(|p| format!("`{}` (no longer has uncommitted changes)", inline(p))),
-        );
-    for entry in entries.clone().take(MAX_FILES_IN_CONTEXT) {
-        writeln!(out, "- {entry}").unwrap();
+    let (entries, hidden) = stale.entries(MAX_FILES_IN_CONTEXT);
+    for (path, note) in entries {
+        writeln!(out, "- {} ({})", code_span(&path), inline(&note)).unwrap();
     }
-    let hidden = entries.count().saturating_sub(MAX_FILES_IN_CONTEXT);
     if hidden > 0 {
         writeln!(out, "- …and {hidden} more").unwrap();
     }
@@ -198,7 +229,7 @@ pub fn generate_context_with(session: &Session, stale: Option<&Staleness>) -> St
             "- **Commit:** {}",
             git.commit
                 .as_deref()
-                .map_or("(no commits yet)", |c| &c[..c.len().min(8)])
+                .map_or("(no commits yet)".into(), short_hash)
         )
         .unwrap();
         writeln!(
@@ -214,7 +245,13 @@ pub fn generate_context_with(session: &Session, stale: Option<&Staleness>) -> St
         if !latest.files_changed.is_empty() {
             writeln!(out, "## Files Changed (as of last checkpoint)").unwrap();
             for file in latest.files_changed.iter().take(MAX_FILES_IN_CONTEXT) {
-                writeln!(out, "- `{}` ({})", inline(&file.path), file.status).unwrap();
+                writeln!(
+                    out,
+                    "- {} ({})",
+                    code_span(&file.path),
+                    inline(&file.status.to_string())
+                )
+                .unwrap();
             }
             let hidden = latest
                 .files_changed
@@ -288,7 +325,7 @@ pub fn write_context_file(
     let (new_text, outcome) = match existing {
         None => (block, WriteOutcome::Created),
         Some(_) if force => (block, WriteOutcome::Overwritten),
-        Some(text) => match (text.find(BLOCK_START_PREFIX), text.find(BLOCK_END)) {
+        Some(text) => match find_block(&text) {
             (Some(start), Some(end)) if start < end => {
                 let mut after = &text[end + BLOCK_END.len()..];
                 after = after.strip_prefix('\n').unwrap_or(after);
@@ -419,6 +456,7 @@ mod tests {
                 status: FileStatus::Renamed {
                     from: "src/old.rs".into(),
                 },
+                fingerprint: None,
             }],
         );
         let ctx = generate_context(&session);
@@ -491,5 +529,86 @@ mod tests {
             Err(SessionError::MalformedBlock(_))
         ));
         assert!(fs::read_to_string(&path).unwrap().contains("no end marker"));
+    }
+
+    #[test]
+    fn test_code_span_cannot_be_broken_out_of() {
+        assert_eq!(code_span("src/a.rs"), "`src/a.rs`");
+        assert_eq!(code_span("a`b.txt"), "``a`b.txt``");
+        assert_eq!(code_span("`lead"), "`` `lead ``");
+        assert_eq!(code_span("#odd name"), "`#odd name`");
+        assert!(!code_span("x\n## Injected").contains('\n'));
+    }
+
+    #[test]
+    fn test_rename_source_cannot_inject_structure() {
+        let mut session = test_session();
+        session.add_checkpoint(
+            "cp".into(),
+            vec![FileState {
+                path: "new.rs".into(),
+                status: FileStatus::Renamed {
+                    from: "old\n## Injected <!-- pas-agent:end -->".into(),
+                },
+                fingerprint: None,
+            }],
+        );
+        let ctx = generate_context(&session);
+        assert!(!ctx.contains("\n## Injected"));
+        assert!(!ctx.contains("<!-- pas-agent:end -->"));
+    }
+
+    #[test]
+    fn test_short_hash_never_panics() {
+        let mut session = test_session();
+        session.git = Some(GitRef {
+            branch: None,
+            commit: Some("ééééééééééé".into()),
+            dirty: false,
+        });
+        assert!(generate_context(&session).contains("éééééééé"));
+    }
+
+    #[test]
+    fn test_markers_only_count_at_line_start() {
+        let mentions = "const A: &str = \"<!-- pas-agent:start\";\nconst B: &str = \"<!-- pas-agent:end -->\";\n";
+        assert!(!contains_block(mentions));
+        assert!(contains_block(&format!(
+            "{BLOCK_START}\nbody\n{BLOCK_END}\n"
+        )));
+
+        // A file that only mentions the markers is treated as having no block: the
+        // block is appended and the file is not rejected as malformed.
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("AGENTS.md");
+        fs::write(&path, mentions).unwrap();
+        assert_eq!(
+            write_context_file(&path, "x", false).unwrap(),
+            WriteOutcome::Appended
+        );
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.starts_with(mentions));
+    }
+
+    #[test]
+    fn test_stale_section_is_rendered_and_safe() {
+        use crate::stale::compare_with_checkpoint;
+        let mut session = test_session();
+        session.add_checkpoint("cp".into(), vec![]);
+        let now = vec![FileState {
+            path: "a`b\n## Injected.rs".into(),
+            status: FileStatus::Untracked,
+            fingerprint: None,
+        }];
+        let stale = compare_with_checkpoint(
+            session.latest_checkpoint().unwrap(),
+            session.git.as_ref().and_then(|g| g.commit.as_deref()),
+            &now,
+        )
+        .unwrap();
+        let ctx = generate_context_with(&session, Some(&stale));
+        assert!(ctx.contains("## Changed Since Last Checkpoint"));
+        assert!(ctx.contains("``a`b ## Injected.rs`` (untracked)"));
+        assert!(!ctx.contains("\n## Injected"));
     }
 }

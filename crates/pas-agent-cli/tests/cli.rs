@@ -377,7 +377,7 @@ fn edit_after_checkpoint_warns_in_status_and_export() {
     let text = fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
     assert!(text.contains("## Changed Since Last Checkpoint"));
     assert!(text.contains("- `b.txt` (untracked)"));
-    assert!(text.contains("`\\#odd name.txt`"));
+    assert!(text.contains("- `#odd name.txt` (untracked)"));
     assert_eq!(text.matches("<!-- pas-agent:end -->").count(), 1);
 }
 
@@ -395,7 +395,7 @@ fn new_commit_after_checkpoint_is_stale() {
         .arg("status")
         .assert()
         .success()
-        .stdout(contains("⚠ 1 file changed since the last checkpoint"))
+        .stdout(contains("⚠ HEAD moved since the last checkpoint"))
         .stdout(contains("HEAD "))
         .stdout(contains("a.txt (no longer changed)"));
 
@@ -406,7 +406,7 @@ fn new_commit_after_checkpoint_is_stale() {
         .stderr(contains("since the last checkpoint"));
     let text = fs::read_to_string(dir.path().join("CLAUDE.md")).unwrap();
     assert!(text.contains("## Changed Since Last Checkpoint"));
-    assert!(text.contains("`a.txt` (no longer has uncommitted changes)"));
+    assert!(text.contains("- `a.txt` (no longer changed)"));
 
     // A new checkpoint clears the warning.
     pas(dir.path())
@@ -418,4 +418,185 @@ fn new_commit_after_checkpoint_is_stale() {
         .assert()
         .success()
         .stdout(contains("since the last checkpoint").not());
+}
+
+fn warns(dir: &Path) -> bool {
+    let out = pas(dir).arg("status").output().unwrap();
+    String::from_utf8_lossy(&out.stdout).contains("since the last checkpoint")
+}
+
+#[test]
+fn further_edit_to_an_already_changed_file_is_stale() {
+    let dir = git_repo();
+    fs::write(dir.path().join("a.txt"), "first edit\n").unwrap();
+    fs::write(dir.path().join("new.txt"), "untracked\n").unwrap();
+    pas(dir.path())
+        .args(["checkpoint", "wip"])
+        .assert()
+        .success();
+    assert!(!warns(dir.path()));
+
+    fs::write(dir.path().join("a.txt"), "second, longer edit\n").unwrap();
+    pas(dir.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(contains("⚠ 1 file changed since the last checkpoint"))
+        .stdout(contains("a.txt (modified)"));
+
+    pas(dir.path())
+        .args(["checkpoint", "again"])
+        .assert()
+        .success();
+    assert!(!warns(dir.path()));
+    fs::write(dir.path().join("new.txt"), "untracked, edited\n").unwrap();
+    assert!(warns(dir.path()));
+}
+
+#[test]
+fn checkpoint_without_fingerprints_is_not_reported_stale() {
+    // Sessions written before fingerprints existed must not all turn stale.
+    let dir = git_repo();
+    fs::write(dir.path().join("a.txt"), "edited\n").unwrap();
+    pas(dir.path())
+        .args(["checkpoint", "wip"])
+        .assert()
+        .success();
+    let path = dir.path().join(".pas-agent/session.json");
+    let mut json = session_json(dir.path());
+    for file in json["checkpoints"][0]["files_changed"]
+        .as_array_mut()
+        .unwrap()
+    {
+        file.as_object_mut().unwrap().remove("fingerprint");
+    }
+    fs::write(&path, json.to_string()).unwrap();
+    assert!(!warns(dir.path()));
+}
+
+#[test]
+fn editing_a_file_that_mentions_the_export_marker_is_stale() {
+    let dir = TempDir::new().unwrap();
+    git(dir.path(), &["init", "-q"]);
+    fs::write(
+        dir.path().join("lib.rs"),
+        "const START: &str = \"<!-- pas-agent:start\";\n",
+    )
+    .unwrap();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-q", "-m", "first"]);
+    init(dir.path());
+    pas(dir.path())
+        .args(["checkpoint", "wip"])
+        .assert()
+        .success();
+    fs::write(
+        dir.path().join("lib.rs"),
+        "const START: &str = \"<!-- pas-agent:start\";\nfn changed() {}\n",
+    )
+    .unwrap();
+    pas(dir.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(contains("lib.rs (modified)"));
+}
+
+#[test]
+fn committing_checkpointed_files_reports_head_moved() {
+    let dir = git_repo();
+    fs::write(dir.path().join("a.txt"), "edited\n").unwrap();
+    pas(dir.path())
+        .args(["checkpoint", "wip"])
+        .assert()
+        .success();
+    git(dir.path(), &["commit", "-q", "-am", "second"]);
+    pas(dir.path())
+        .args(["export", "--to", "codex"])
+        .assert()
+        .success()
+        .stderr(contains("⚠ HEAD moved since the last checkpoint"));
+    let text = fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
+    assert!(text.contains("## Changed Since Last Checkpoint"));
+    assert!(text.contains("- `a.txt` (no longer changed)"));
+}
+
+#[test]
+fn non_ascii_commit_in_hand_edited_session_does_not_panic() {
+    let dir = git_repo();
+    pas(dir.path())
+        .args(["checkpoint", "wip"])
+        .assert()
+        .success();
+    let path = dir.path().join(".pas-agent/session.json");
+    let mut json = session_json(dir.path());
+    json["checkpoints"][0]["git"]["commit"] = serde_json::json!("ééééééééééé");
+    json["git"]["commit"] = serde_json::json!("ééééééééééé");
+    fs::write(&path, json.to_string()).unwrap();
+
+    pas(dir.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(contains("HEAD éééééééé"));
+    pas(dir.path())
+        .args(["export", "--to", "codex"])
+        .assert()
+        .success();
+    pas(dir.path()).arg("list").assert().success();
+}
+
+#[test]
+fn backtick_in_a_path_cannot_break_the_exported_code_span() {
+    let dir = git_repo();
+    pas(dir.path())
+        .args(["checkpoint", "wip"])
+        .assert()
+        .success();
+    fs::write(dir.path().join("a`b.txt"), "x\n").unwrap();
+    pas(dir.path())
+        .args(["export", "--to", "codex"])
+        .assert()
+        .success();
+    let text = fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
+    assert!(text.contains("- ``a`b.txt`` (untracked)"));
+}
+
+#[cfg(unix)]
+#[test]
+fn terminal_output_neutralises_control_characters_in_filenames() {
+    let dir = git_repo();
+    pas(dir.path())
+        .args(["checkpoint", "wip"])
+        .assert()
+        .success();
+    fs::write(dir.path().join("evil\x1b[2Kname.txt"), "x\n").unwrap();
+    let out = pas(dir.path()).arg("status").output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("evil?[2Kname.txt"), "{stdout}");
+    assert!(!stdout.contains('\x1b'));
+}
+
+#[cfg(unix)]
+#[test]
+fn export_follows_a_symlinked_instruction_file() {
+    use std::os::unix::fs::symlink;
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    fs::write(dir.path().join("AGENTS.md"), "# House rules\n").unwrap();
+    symlink("AGENTS.md", dir.path().join("CLAUDE.md")).unwrap();
+
+    pas(dir.path())
+        .args(["export", "--to", "claude"])
+        .assert()
+        .success();
+
+    let link = dir.path().join("CLAUDE.md");
+    assert!(fs::symlink_metadata(&link)
+        .unwrap()
+        .file_type()
+        .is_symlink());
+    let text = fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
+    assert!(text.starts_with("# House rules\n"));
+    assert!(text.contains("<!-- pas-agent:start"));
 }

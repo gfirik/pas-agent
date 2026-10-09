@@ -1,7 +1,7 @@
 use chrono::Utc;
 use clap::{Parser, Subcommand, ValueEnum};
 use pas_agent_core::{
-    capture_git_state, check_staleness, generate_context_with, get_changed_files,
+    capture_git_state, check_staleness, generate_context_with, get_changed_files, short_hash,
     write_context_file, Agent, ContextFormat, GitRef, Session, SessionError, SessionStore,
     Staleness, TaskState, WriteOutcome, STORE_DIR,
 };
@@ -229,8 +229,8 @@ fn prompt(message: &str) -> Result<String> {
     Ok(input.trim().to_string())
 }
 
-fn short_commit(commit: Option<&str>) -> &str {
-    commit.map_or("no commits", |c| &c[..c.len().min(8)])
+fn short_commit(commit: Option<&str>) -> String {
+    commit.map_or("no commits".into(), short_hash)
 }
 
 fn describe_git(git: &GitRef) -> String {

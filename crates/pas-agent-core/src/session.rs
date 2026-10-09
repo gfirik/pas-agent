@@ -68,6 +68,17 @@ pub struct Checkpoint {
 pub struct FileState {
     pub path: String,
     pub status: FileStatus,
+    /// Fingerprint of the file's content when it was captured, used to notice further
+    /// edits to a file that was already changed. `None` for deleted files and for
+    /// checkpoints written before this field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
+}
+
+/// First 8 characters of a commit hash, safe for any string (including hand-edited ones).
+#[must_use]
+pub fn short_hash(commit: &str) -> String {
+    commit.chars().take(8).collect()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
