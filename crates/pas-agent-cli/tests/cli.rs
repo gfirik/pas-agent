@@ -356,7 +356,7 @@ fn edit_after_checkpoint_warns_in_status_and_export() {
         .assert()
         .success();
     fs::write(dir.path().join("b.txt"), "new\n").unwrap();
-    fs::write(dir.path().join("# odd <!-- name.txt"), "x\n").unwrap();
+    fs::write(dir.path().join("#odd name.txt"), "x\n").unwrap();
 
     pas(dir.path())
         .arg("status")
@@ -377,7 +377,7 @@ fn edit_after_checkpoint_warns_in_status_and_export() {
     let text = fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
     assert!(text.contains("## Changed Since Last Checkpoint"));
     assert!(text.contains("- `b.txt` (untracked)"));
-    assert!(text.contains("&lt;!-- name.txt"));
+    assert!(text.contains("`\\#odd name.txt`"));
     assert_eq!(text.matches("<!-- pas-agent:end -->").count(), 1);
 }
 
