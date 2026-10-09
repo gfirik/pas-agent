@@ -290,3 +290,132 @@ fn session_json_has_schema_version() {
     init(dir.path());
     assert_eq!(session_json(dir.path())["schema_version"], 1);
 }
+
+fn git_repo() -> TempDir {
+    let dir = TempDir::new().unwrap();
+    git(dir.path(), &["init", "-q"]);
+    fs::write(dir.path().join("a.txt"), "one\n").unwrap();
+    git(dir.path(), &["add", "."]);
+    git(dir.path(), &["commit", "-q", "-m", "first"]);
+    init(dir.path());
+    dir
+}
+
+#[test]
+fn stale_warning_absent_without_checkpoint() {
+    let dir = git_repo();
+    fs::write(dir.path().join("a.txt"), "edited\n").unwrap();
+    pas(dir.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(contains("since the last checkpoint").not());
+    pas(dir.path())
+        .args(["export", "--to", "codex"])
+        .assert()
+        .success()
+        .stderr(contains("since the last checkpoint").not());
+    let text = fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
+    assert!(!text.contains("Changed Since Last Checkpoint"));
+}
+
+#[test]
+fn fresh_checkpoint_has_no_warning_even_after_export() {
+    let dir = git_repo();
+    fs::write(dir.path().join("a.txt"), "edited\n").unwrap();
+    pas(dir.path())
+        .args(["checkpoint", "wip"])
+        .assert()
+        .success();
+    pas(dir.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(contains("since the last checkpoint").not());
+    pas(dir.path())
+        .args(["export", "--to", "codex"])
+        .assert()
+        .success()
+        .stderr(contains("since the last checkpoint").not());
+    // The exported file itself must not make the checkpoint look stale.
+    pas(dir.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(contains("since the last checkpoint").not());
+    let text = fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
+    assert!(!text.contains("Changed Since Last Checkpoint"));
+}
+
+#[test]
+fn edit_after_checkpoint_warns_in_status_and_export() {
+    let dir = git_repo();
+    fs::write(dir.path().join("a.txt"), "edited\n").unwrap();
+    pas(dir.path())
+        .args(["checkpoint", "wip"])
+        .assert()
+        .success();
+    fs::write(dir.path().join("b.txt"), "new\n").unwrap();
+    fs::write(dir.path().join("# odd <!-- name.txt"), "x\n").unwrap();
+
+    pas(dir.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(contains("⚠ 2 files changed since the last checkpoint"))
+        .stdout(contains("Run `pas-agent checkpoint` to update."))
+        .stdout(contains("b.txt (untracked)"));
+
+    pas(dir.path())
+        .args(["export", "--to", "codex"])
+        .assert()
+        .success()
+        .stdout(contains("Created"))
+        .stderr(contains("⚠ 2 files changed since the last checkpoint"))
+        .stderr(contains("b.txt (untracked)"));
+
+    let text = fs::read_to_string(dir.path().join("AGENTS.md")).unwrap();
+    assert!(text.contains("## Changed Since Last Checkpoint"));
+    assert!(text.contains("- `b.txt` (untracked)"));
+    assert!(text.contains("&lt;!-- name.txt"));
+    assert_eq!(text.matches("<!-- pas-agent:end -->").count(), 1);
+}
+
+#[test]
+fn new_commit_after_checkpoint_is_stale() {
+    let dir = git_repo();
+    fs::write(dir.path().join("a.txt"), "edited\n").unwrap();
+    pas(dir.path())
+        .args(["checkpoint", "wip"])
+        .assert()
+        .success();
+    git(dir.path(), &["commit", "-q", "-am", "second"]);
+
+    pas(dir.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(contains("⚠ 1 file changed since the last checkpoint"))
+        .stdout(contains("HEAD "))
+        .stdout(contains("a.txt (no longer changed)"));
+
+    pas(dir.path())
+        .args(["export", "--to", "claude"])
+        .assert()
+        .success()
+        .stderr(contains("since the last checkpoint"));
+    let text = fs::read_to_string(dir.path().join("CLAUDE.md")).unwrap();
+    assert!(text.contains("## Changed Since Last Checkpoint"));
+    assert!(text.contains("`a.txt` (no longer has uncommitted changes)"));
+
+    // A new checkpoint clears the warning.
+    pas(dir.path())
+        .args(["checkpoint", "after commit"])
+        .assert()
+        .success();
+    pas(dir.path())
+        .arg("status")
+        .assert()
+        .success()
+        .stdout(contains("since the last checkpoint").not());
+}

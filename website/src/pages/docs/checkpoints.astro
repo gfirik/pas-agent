@@ -48,6 +48,32 @@ Checkpoints for my-project (3):
     stays in <code>session.json</code>.
   </p>
 
+  <h2 id="stale-checkpoints">Stale Checkpoints</h2>
+  <p>
+    A checkpoint is a snapshot, so edits made afterwards are not in it. PAS-Agent compares the
+    current git commit and changed files with the latest checkpoint. The checkpoint counts as
+    stale if the commit differs, or a file is new, no longer changed, or has a different status.
+    Context files that <code>pas-agent export</code> wrote are ignored in this comparison.
+  </p>
+  <pre><code>$ pas-agent status
+...
+⚠ 3 files changed since the last checkpoint (2026-10-09 14:20 UTC). Run `pas-agent checkpoint` to update.
+    src/auth/hash.rs (untracked)
+    src/auth/mod.rs (modified)
+    src/old.rs (no longer changed)</code></pre>
+  <p>
+    <code>pas-agent export</code> prints the same warning on stderr but still exports. The
+    context file gets a short section so the next agent knows the checkpoint is not current:
+  </p>
+  <pre><code>## Changed Since Last Checkpoint
+The last checkpoint (2026-10-09 14:20 UTC) is out of date, so the sections above may miss recent work. These changes were made after it:
+- `src/auth/hash.rs` (untracked)</code></pre>
+  <p>
+    Run <code>pas-agent checkpoint</code> to clear the warning. The list is capped at 50 files,
+    and nothing extra is stored in <code>session.json</code>. There is no warning before the
+    first checkpoint or outside a git repository.
+  </p>
+
   <h2>Storage</h2>
   <p>
     Checkpoints are stored inside <code>.pas-agent/session.json</code>, in order.

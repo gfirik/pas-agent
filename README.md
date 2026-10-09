@@ -79,6 +79,16 @@ Agents read their instruction file only when a session **starts**, so export *be
 launch the next agent. If it's already running, restart it or ask it to read `AGENTS.md`.
 You can also skip the terminal: ask the agent itself to run `pas-agent init` in the chat.
 
+If you kept editing (or committed) after your last checkpoint, `status` and `export` warn you:
+
+```text
+⚠ 3 files changed since the last checkpoint (2026-10-09 14:20 UTC). Run `pas-agent checkpoint` to update.
+    src/auth/hash.rs (untracked)
+```
+
+`export` still goes ahead, and adds a **Changed Since Last Checkpoint** section to the context
+file so the next agent knows the checkpoint isn't fully current.
+
 ### Let the agent do it
 
 `pas-agent` is an ordinary command, so your agent can keep the session up to date itself. Add
@@ -141,7 +151,7 @@ changes to `.pas-agent/` the same way you'd review changes to `CLAUDE.md`.
 | `update` | Set task, objective, next action; add or complete list items |
 | `remove <list> <N>…` | Remove items by number |
 | `checkpoint [msg]` | Snapshot task state, git state and changed files |
-| `status` | Show the session with numbered lists |
+| `status` | Show the session with numbered lists; warns if changes came after the last checkpoint |
 | `list` | List checkpoints |
 | `export --to <agent>` | Write context for the next agent |
 
