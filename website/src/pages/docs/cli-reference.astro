@@ -82,6 +82,10 @@ Options:
   -o, --output &lt;PATH&gt;   Output file (defaults to CLAUDE.md, AGENTS.md or GEMINI.md in the project root)
       --force           Replace the whole file instead of only the PAS-Agent block</code></pre>
   <p>
+    If the working tree changed after the latest checkpoint, <code>export</code> prints the
+    same warning as <code>status</code> on stderr, still writes the file, and adds a
+    <code>Changed Since Last Checkpoint</code> section to it. If the output file is a symlink,
+    the file it points to is updated and the link is kept.
     Unknown targets are rejected. See <a href={withBase('/docs/portable-state')}>Portable State</a>
     for how the block is written.
   </p>

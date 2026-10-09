@@ -153,7 +153,12 @@ impl SessionStore {
 
 /// Writes `contents` to a sibling temp file, then renames it over `path`, so a crash
 /// mid-write never leaves a truncated file behind.
+///
+/// A symlink at `path` is followed, so the file it points to is updated and the link is
+/// kept; an existing file's permissions are preserved.
 pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), SessionError> {
+    let resolved = resolve_symlink(path);
+    let path = resolved.as_path();
     let file_name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -164,6 +169,9 @@ pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), SessionEr
         let mut file = fs::File::create(&tmp)?;
         file.write_all(contents)?;
         file.sync_all()?;
+        if let Ok(meta) = fs::metadata(path) {
+            fs::set_permissions(&tmp, meta.permissions())?;
+        }
         fs::rename(&tmp, path)
     })();
 
@@ -171,6 +179,21 @@ pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> Result<(), SessionEr
         let _ = fs::remove_file(&tmp);
         SessionError::io(path, e)
     })
+}
+
+/// Resolves `path` through symlinks; a dangling link resolves to its (missing) target.
+fn resolve_symlink(path: &Path) -> PathBuf {
+    let is_link = fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink());
+    if !is_link {
+        return path.to_path_buf();
+    }
+    if let Ok(real) = fs::canonicalize(path) {
+        return real;
+    }
+    match fs::read_link(path) {
+        Ok(target) => path.parent().map_or(target.clone(), |dir| dir.join(target)),
+        Err(_) => path.to_path_buf(),
+    }
 }
 
 #[cfg(test)]
@@ -240,5 +263,47 @@ mod tests {
         store.save(&Session::new("p".into(), "t".into())).unwrap();
         let entries: Vec<_> = fs::read_dir(store.base_dir()).unwrap().collect();
         assert_eq!(entries.len(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_write_atomic_follows_symlink_and_keeps_permissions() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let dir = TempDir::new().unwrap();
+        let target = dir.path().join("AGENTS.md");
+        let link = dir.path().join("CLAUDE.md");
+        fs::write(&target, "old").unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o640)).unwrap();
+        symlink("AGENTS.md", &link).unwrap();
+
+        write_atomic(&link, b"new").unwrap();
+
+        assert!(fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "new");
+        assert_eq!(
+            fs::metadata(&target).unwrap().permissions().mode() & 0o777,
+            0o640
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_write_atomic_through_dangling_symlink_creates_target() {
+        use std::os::unix::fs::symlink;
+        let dir = TempDir::new().unwrap();
+        let link = dir.path().join("CLAUDE.md");
+        symlink("AGENTS.md", &link).unwrap();
+        write_atomic(&link, b"new").unwrap();
+        assert!(fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            fs::read_to_string(dir.path().join("AGENTS.md")).unwrap(),
+            "new"
+        );
     }
 }

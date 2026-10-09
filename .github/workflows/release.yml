@@ -13,7 +13,21 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  verify:
+    name: tag matches version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the tag against Cargo.toml
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match workspace version ${version}"
+            exit 1
+          fi
+
   build:
+    needs: verify
     name: build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
