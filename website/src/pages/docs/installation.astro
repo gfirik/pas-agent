@@ -39,6 +39,14 @@ pas-agent 0.2.0</code></pre>
     <code>git</code> executable on your <code>PATH</code>.
   </p>
   <p>
-    The full test suite runs in CI on Linux, macOS, and Windows for every change.
+    The test suite runs in CI on Linux, macOS, and Windows for every change. The few tests
+    that need Unix symlinks (exporting into a symlinked <code>CLAUDE.md</code>) run on Linux and
+    macOS only, so symlink handling on Windows is untested.
+  </p>
+  <p>
+    Before a release is published, each prebuilt binary is run on its own platform
+    (<code>--version</code> plus a short init, checkpoint, status, and export session), including
+    Linux arm64 and macOS Intel. The regular CI suite covers Linux x86_64, macOS on Apple Silicon,
+    and Windows x86_64.
   </p>
 </DocsLayout>

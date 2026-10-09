@@ -7,8 +7,8 @@ mod stale;
 mod storage;
 
 pub use context::{
-    generate_context, generate_context_with, write_context_file, ContextFormat, WriteOutcome,
-    MAX_CHECKPOINTS_IN_CONTEXT, MAX_FILES_IN_CONTEXT,
+    context_char_limit, generate_context, generate_context_with, write_context_file, ContextFormat,
+    WriteOutcome, ANTIGRAVITY_MAX_CONTEXT_CHARS, MAX_CHECKPOINTS_IN_CONTEXT, MAX_FILES_IN_CONTEXT,
 };
 pub use git::{capture_git_state, get_changed_files, git_toplevel, head_commit};
 pub use session::{
@@ -16,4 +16,4 @@ pub use session::{
     SCHEMA_VERSION,
 };
 pub use stale::{check_staleness, compare_with_checkpoint, Staleness};
-pub use storage::{SessionError, SessionStore, STORE_DIR};
+pub use storage::{SessionError, SessionLock, SessionStore, STORE_DIR};

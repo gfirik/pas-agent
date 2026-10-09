@@ -30,10 +30,20 @@ import DocsLayout from '../../layouts/DocsLayout.astro';
     Everything lives in a single JSON file at the project root:
   </p>
   <pre><code>.pas-agent/
-└── session.json   # task state, git state, and all checkpoints</code></pre>
+├── session.json   # task state, git state, and all checkpoints
+└── session.lock   # only present while a command is running</code></pre>
   <p>
     Writes are atomic: the file is written to a temporary file and then renamed into place,
     so a crash can't leave a half-written session behind.
+  </p>
+  <p>
+    Commands that change the session (<code>init</code>, <code>update</code>,
+    <code>remove</code>, <code>checkpoint</code>, <code>export</code>) hold
+    <code>session.lock</code> while they read, modify, and save, so several agents working in the
+    same project never overwrite each other's changes. They wait up to 5 seconds for the lock.
+    <code>status</code> and <code>list</code> only read and don't take it. A lock left behind by a
+    crashed process is taken over after 30 seconds. <code>PAS_AGENT_LOCK_TIMEOUT_MS</code> and
+    <code>PAS_AGENT_LOCK_STALE_MS</code> change those two limits.
   </p>
 
   <h2>File Format</h2>

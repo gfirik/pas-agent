@@ -600,3 +600,125 @@ fn export_follows_a_symlinked_instruction_file() {
     assert!(text.starts_with("# House rules\n"));
     assert!(text.contains("<!-- pas-agent:start"));
 }
+
+#[test]
+fn concurrent_updates_are_all_kept() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let children: Vec<_> = (0..12)
+        .map(|i| {
+            let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("pas-agent"));
+            cmd.current_dir(dir.path())
+                .args(["update", "--completed", &format!("item-{i}")])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+            cmd.spawn().unwrap()
+        })
+        .collect();
+    for mut child in children {
+        assert!(child.wait().unwrap().success());
+    }
+    let completed = session_json(dir.path())["task"]["completed"]
+        .as_array()
+        .unwrap()
+        .len();
+    assert_eq!(completed, 12, "updates were lost");
+}
+
+#[test]
+fn held_lock_makes_commands_fail_with_a_clear_message() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    fs::write(dir.path().join(".pas-agent/session.lock"), "999999").unwrap();
+
+    pas(dir.path())
+        .env("PAS_AGENT_LOCK_TIMEOUT_MS", "150")
+        .args(["update", "--completed", "x"])
+        .assert()
+        .failure()
+        .stderr(contains("locked by another pas-agent process"))
+        .stderr(contains("session.lock"));
+    // Nothing was written, and the other process's lock was left alone.
+    assert!(session_json(dir.path())["task"]["completed"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    assert!(dir.path().join(".pas-agent/session.lock").exists());
+    // Read-only commands do not need the lock.
+    pas(dir.path()).arg("status").assert().success();
+}
+
+#[test]
+fn stale_lock_from_a_crashed_process_is_taken_over() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let lock = dir.path().join(".pas-agent/session.lock");
+    let file = fs::File::create(&lock).unwrap();
+    file.set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(3600))
+        .unwrap();
+    drop(file);
+
+    pas(dir.path())
+        .args(["update", "--completed", "x"])
+        .assert()
+        .success();
+    assert!(!lock.exists(), "lock should be released after the command");
+}
+
+#[test]
+fn concurrent_inits_create_exactly_one_session() {
+    let dir = TempDir::new().unwrap();
+    let children: Vec<_> = (0..6)
+        .map(|_| {
+            std::process::Command::new(assert_cmd::cargo::cargo_bin("pas-agent"))
+                .current_dir(dir.path())
+                .args(["init", "--task", "Build it"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .unwrap()
+        })
+        .collect();
+    let ok = children
+        .into_iter()
+        .map(|mut c| c.wait().unwrap().success())
+        .filter(|&s| s)
+        .count();
+    assert_eq!(ok, 1);
+    assert!(!dir.path().join(".pas-agent/session.lock").exists());
+}
+
+#[test]
+fn oversized_context_warns_only_for_agents_with_a_known_limit() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let mut cmd = pas(dir.path());
+    cmd.arg("update");
+    for i in 0..400 {
+        cmd.args([
+            "--remaining",
+            &format!("remaining item number {i} with some padding text"),
+        ]);
+    }
+    cmd.assert().success();
+
+    pas(dir.path())
+        .args(["export", "--to", "antigravity"])
+        .assert()
+        .success()
+        .stderr(contains("reads at most 12000"));
+    pas(dir.path())
+        .args(["export", "--to", "codex"])
+        .assert()
+        .success()
+        .stderr(contains("reads at most").not());
+
+    // A small context does not warn, even for Antigravity.
+    let small = TempDir::new().unwrap();
+    init(small.path());
+    pas(small.path())
+        .args(["export", "--to", "antigravity"])
+        .assert()
+        .success()
+        .stderr(contains("reads at most").not());
+}

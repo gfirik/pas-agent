@@ -1,9 +1,9 @@
 use chrono::Utc;
 use clap::{Parser, Subcommand, ValueEnum};
 use pas_agent_core::{
-    capture_git_state, check_staleness, generate_context_with, get_changed_files, short_hash,
-    write_context_file, Agent, ContextFormat, GitRef, Session, SessionError, SessionStore,
-    Staleness, TaskState, WriteOutcome, STORE_DIR,
+    capture_git_state, check_staleness, context_char_limit, generate_context_with,
+    get_changed_files, short_hash, write_context_file, Agent, ContextFormat, GitRef, Session,
+    SessionError, SessionLock, SessionStore, Staleness, TaskState, WriteOutcome, STORE_DIR,
 };
 use std::collections::BTreeSet;
 use std::io::{self, BufRead, Write};
@@ -283,6 +283,21 @@ fn open_session(cwd: &Path) -> Result<(SessionStore, Session)> {
     Ok((store, session))
 }
 
+/// Like [`open_session`], but holds the session lock until the returned guard is dropped,
+/// so concurrent `pas-agent` processes cannot overwrite each other's changes.
+fn open_session_locked(cwd: &Path) -> Result<(SessionStore, Session, SessionLock)> {
+    let Some(store) = SessionStore::discover(cwd) else {
+        return Err(format!(
+            "no PAS-Agent session found in {} or any parent directory; run `pas-agent init` first",
+            cwd.display()
+        )
+        .into());
+    };
+    let lock = store.lock()?;
+    let session = store.load()?;
+    Ok((store, session, lock))
+}
+
 fn run() -> Result<()> {
     let cli = Cli::parse();
     let cwd = std::env::current_dir()?;
@@ -291,12 +306,15 @@ fn run() -> Result<()> {
         Commands::Init { name, task } => {
             let root = SessionStore::init_root(&cwd);
             let store = SessionStore::new(&root);
-            if store.exists() {
-                return Err(format!(
+            let already_exists = || -> Result<()> {
+                Err(format!(
                     "a PAS-Agent session already exists at {}",
                     store.session_path().display()
                 )
-                .into());
+                .into())
+            };
+            if store.exists() {
+                return already_exists();
             }
 
             let project_name = name.unwrap_or_else(|| {
@@ -312,6 +330,11 @@ fn run() -> Result<()> {
                 return Err("task description cannot be empty".into());
             }
 
+            // Re-check under the lock so two concurrent `init`s cannot both succeed.
+            let _lock = store.lock()?;
+            if store.exists() {
+                return already_exists();
+            }
             let mut session = Session::new(project_name.clone(), description);
             session.git = capture_git_state(&root);
             store.save(&session)?;
@@ -330,7 +353,7 @@ fn run() -> Result<()> {
         }
 
         Commands::Checkpoint { message } => {
-            let (store, mut session) = open_session(&cwd)?;
+            let (store, mut session, _lock) = open_session_locked(&cwd)?;
             let msg = if message.is_empty() {
                 prompt("Checkpoint message:")?
             } else {
@@ -428,7 +451,7 @@ fn run() -> Result<()> {
         }
 
         Commands::Export { to, output, force } => {
-            let (store, mut session) = open_session(&cwd)?;
+            let (store, mut session, _lock) = open_session_locked(&cwd)?;
             let agent = Agent::from(to);
             let format = ContextFormat::for_agent(agent);
 
@@ -440,6 +463,14 @@ fn run() -> Result<()> {
                 print_staleness(stale, true);
             }
             let content = generate_context_with(&session, stale.as_ref());
+            if let Some(limit) = context_char_limit(agent) {
+                let size = content.chars().count();
+                if size > limit {
+                    eprintln!(
+                        "⚠ The exported context is {size} characters, but {agent} reads at most {limit} of a rules file, so the end may be cut off. Shorten it with `pas-agent remove <list> <N>`."
+                    );
+                }
+            }
             let out_path = output.unwrap_or_else(|| store.project_dir().join(format.filename()));
             let outcome = write_context_file(&out_path, &content, force)?;
 
@@ -479,7 +510,7 @@ fn run() -> Result<()> {
             done,
             resolve,
         } => {
-            let (store, mut session) = open_session(&cwd)?;
+            let (store, mut session, _lock) = open_session_locked(&cwd)?;
             let before = session.task.clone();
             let t = &mut session.task;
 
@@ -521,7 +552,7 @@ fn run() -> Result<()> {
         }
 
         Commands::Remove { list, items } => {
-            let (store, mut session) = open_session(&cwd)?;
+            let (store, mut session, _lock) = open_session_locked(&cwd)?;
             let removed = take_items(list.get(&mut session.task), &items, list.name())?;
             session.updated_at = Utc::now();
             store.save(&session)?;
