@@ -1,5 +1,6 @@
 ---
 import DocsLayout from '../../layouts/DocsLayout.astro';
+import { RELEASE_URL, VERSION } from '../../data/site';
 ---
 <DocsLayout title="Installation" activeSlug="installation" description="Install the PAS-Agent CLI with Cargo. Requires Rust 1.85 or later and git.">
   <h1>Installation</h1>
@@ -31,7 +32,10 @@ cargo install --path crates/pas-agent-cli</code></pre>
 
   <h2>Verify Installation</h2>
   <pre><code>$ pas-agent --version
-pas-agent 0.2.0</code></pre>
+pas-agent {VERSION}</code></pre>
+  <p>
+    The current release is <a href={RELEASE_URL}>v{VERSION}</a>.
+  </p>
 
   <h2>Platform Support</h2>
   <p>
