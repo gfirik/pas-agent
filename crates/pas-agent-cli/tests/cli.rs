@@ -600,3 +600,188 @@ fn export_follows_a_symlinked_instruction_file() {
     assert!(text.starts_with("# House rules\n"));
     assert!(text.contains("<!-- pas-agent:start"));
 }
+
+#[test]
+fn concurrent_updates_are_all_kept() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let children: Vec<_> = (0..12)
+        .map(|i| {
+            let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("pas-agent"));
+            cmd.current_dir(dir.path())
+                .args(["update", "--completed", &format!("item-{i}")])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null());
+            cmd.spawn().unwrap()
+        })
+        .collect();
+    for mut child in children {
+        assert!(child.wait().unwrap().success());
+    }
+    let completed = session_json(dir.path())["task"]["completed"]
+        .as_array()
+        .unwrap()
+        .len();
+    assert_eq!(completed, 12, "updates were lost");
+}
+
+/// Takes the session lock the way another running `pas-agent` would.
+fn hold_lock(dir: &Path) -> fs::File {
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(dir.join(".pas-agent/session.lock"))
+        .unwrap();
+    fs4::FileExt::try_lock(&file).expect("lock should be free");
+    file
+}
+
+#[test]
+fn held_lock_makes_commands_fail_with_a_clear_message_then_succeed_after_release() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let held = hold_lock(dir.path());
+
+    pas(dir.path())
+        .env("PAS_AGENT_LOCK_TIMEOUT_MS", "150")
+        .args(["update", "--completed", "x"])
+        .assert()
+        .failure()
+        .stderr(contains("locked by another pas-agent process"))
+        .stderr(contains("session.lock"));
+    // Nothing was written.
+    assert!(session_json(dir.path())["task"]["completed"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    // Read-only commands do not need the lock.
+    pas(dir.path()).arg("status").assert().success();
+
+    drop(held);
+    pas(dir.path())
+        .args(["update", "--completed", "x"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn lock_file_left_by_a_dead_process_does_not_block() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    drop(hold_lock(dir.path())); // the file stays behind, nobody holds the lock
+    assert!(dir.path().join(".pas-agent/session.lock").exists());
+
+    pas(dir.path())
+        .args(["update", "--completed", "x"])
+        .assert()
+        .success();
+    assert_eq!(
+        fs::read_to_string(dir.path().join(".pas-agent/.gitignore")).unwrap(),
+        "session.lock\n"
+    );
+}
+
+#[test]
+fn checkpoint_prompt_does_not_hold_the_lock() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    // `checkpoint` with no message waits on stdin. While it does, other commands must work.
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("pas-agent"))
+        .current_dir(dir.path())
+        .arg("checkpoint")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    pas(dir.path())
+        .env("PAS_AGENT_LOCK_TIMEOUT_MS", "300")
+        .args(["update", "--completed", "while prompting"])
+        .assert()
+        .success();
+    {
+        use std::io::Write;
+        writeln!(child.stdin.take().unwrap(), "late message").unwrap();
+    }
+    assert!(child.wait().unwrap().success());
+    let json = session_json(dir.path());
+    assert_eq!(json["checkpoints"].as_array().unwrap().len(), 1);
+    // The checkpoint was saved on top of the concurrent update, not over it.
+    assert_eq!(
+        json["checkpoints"][0]["task_snapshot"]["completed"][0],
+        "while prompting"
+    );
+}
+
+#[test]
+fn concurrent_inits_create_exactly_one_session() {
+    let dir = TempDir::new().unwrap();
+    let children: Vec<_> = (0..6)
+        .map(|_| {
+            std::process::Command::new(assert_cmd::cargo::cargo_bin("pas-agent"))
+                .current_dir(dir.path())
+                .args(["init", "--task", "Build it"])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .unwrap()
+        })
+        .collect();
+    let ok = children
+        .into_iter()
+        .map(|mut c| c.wait().unwrap().success())
+        .filter(|&s| s)
+        .count();
+    assert_eq!(ok, 1);
+}
+
+#[test]
+fn oversized_context_warns_only_for_agents_with_a_known_limit() {
+    let dir = TempDir::new().unwrap();
+    init(dir.path());
+    let mut cmd = pas(dir.path());
+    cmd.arg("update");
+    for i in 0..400 {
+        cmd.args([
+            "--remaining",
+            &format!("remaining item number {i} with some padding text"),
+        ]);
+    }
+    cmd.assert().success();
+
+    pas(dir.path())
+        .args(["export", "--to", "antigravity"])
+        .assert()
+        .success()
+        .stderr(contains("reads at most 12000"));
+    pas(dir.path())
+        .args(["export", "--to", "codex"])
+        .assert()
+        .success()
+        .stderr(contains("reads at most").not());
+
+    // Your own content outside the block counts toward the limit too.
+    let mixed = TempDir::new().unwrap();
+    init(mixed.path());
+    fs::write(
+        mixed.path().join("AGENTS.md"),
+        "my own rules\n".repeat(1000),
+    )
+    .unwrap();
+    pas(mixed.path())
+        .args(["export", "--to", "antigravity"])
+        .assert()
+        .success()
+        .stderr(contains("reads at most 12000"));
+
+    // A small context does not warn, even for Antigravity.
+    let small = TempDir::new().unwrap();
+    init(small.path());
+    pas(small.path())
+        .args(["export", "--to", "antigravity"])
+        .assert()
+        .success()
+        .stderr(contains("reads at most").not());
+}

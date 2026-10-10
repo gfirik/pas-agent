@@ -24,4 +24,5 @@ chrono.workspace = true
 assert_cmd.workspace = true
 predicates.workspace = true
 tempfile.workspace = true
+fs4.workspace = true
 serde_json.workspace = true

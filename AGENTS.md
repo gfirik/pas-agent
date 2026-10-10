@@ -31,4 +31,6 @@ cd website && bun run build   # only if the website changed
 - Every CLI behaviour change needs an end-to-end test in `crates/pas-agent-cli/tests/cli.rs`
   and matching updates to `website/src/pages/docs/` and `README.md`.
 - The website must only describe features that exist; unbuilt work is labelled as coming next.
+- The website gets the version from `Cargo.toml` (`VERSION` in `website/src/data/site.ts`); never
+  hardcode a version number in a page.
 - Keep the core free of CLI dependencies (no clap in `pas-agent-core`).

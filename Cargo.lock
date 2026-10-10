@@ -234,6 +234,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs4"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e72ed92b67c146290f88e9c89d60ca163ea417a446f61ffd7b72df3e7f1dfd5"
+dependencies = [
+ "rustix",
+ "windows-sys",
+]
+
+[[package]]
 name = "futures-core"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -374,11 +384,12 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "pas-agent-cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "assert_cmd",
  "chrono",
  "clap",
+ "fs4",
  "pas-agent-core",
  "predicates",
  "serde_json",
@@ -387,9 +398,10 @@ dependencies = [
 
 [[package]]
 name = "pas-agent-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "chrono",
+ "fs4",
  "serde",
  "serde_json",
  "tempfile",

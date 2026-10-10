@@ -1,5 +1,6 @@
 ---
 import DocsLayout from '../../layouts/DocsLayout.astro';
+import { RELEASE_URL, VERSION } from '../../data/site';
 ---
 <DocsLayout title="Installation" activeSlug="installation" description="Install the PAS-Agent CLI with Cargo. Requires Rust 1.85 or later and git.">
   <h1>Installation</h1>
@@ -31,7 +32,10 @@ cargo install --path crates/pas-agent-cli</code></pre>
 
   <h2>Verify Installation</h2>
   <pre><code>$ pas-agent --version
-pas-agent 0.2.0</code></pre>
+pas-agent {VERSION}</code></pre>
+  <p>
+    The current release is <a href={RELEASE_URL}>v{VERSION}</a>.
+  </p>
 
   <h2>Platform Support</h2>
   <p>
@@ -39,6 +43,15 @@ pas-agent 0.2.0</code></pre>
     <code>git</code> executable on your <code>PATH</code>.
   </p>
   <p>
-    The full test suite runs in CI on Linux, macOS, and Windows for every change.
+    The test suite runs in CI on Linux, macOS, and Windows for every change. The few tests
+    that need Unix symlinks (exporting into a symlinked <code>CLAUDE.md</code>) run on Linux and
+    macOS only, so symlink handling on Windows is untested.
+  </p>
+  <p>
+    Before a release is published, each prebuilt binary is run once on a CI machine
+    (<code>--version</code> plus a short init, checkpoint, status, and export session). The Linux
+    arm64 binary runs on an arm64 runner. The macOS Intel binary runs under Rosetta on an Apple
+    Silicon runner, not on Intel hardware. The regular CI test suite covers Linux x86_64, macOS on
+    Apple Silicon, and Windows x86_64.
   </p>
 </DocsLayout>

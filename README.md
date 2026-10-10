@@ -132,7 +132,12 @@ marked block and leaves everything else alone:
 <!-- pas-agent:end -->
 ```
 
-Later exports replace only that block. `--force` replaces the whole file.
+Later exports replace only that block. `--force` replaces the whole file. A symlinked
+instruction file stays a symlink. Antigravity ignores anything past 12,000 characters, so
+`export --to antigravity` warns when the written file (your own content included) is longer.
+
+Commands that change the session take an OS lock on `.pas-agent/session.lock`, so two agents
+updating at once never overwrite each other. A crash releases the lock automatically.
 
 ## Where State Lives
 

@@ -1,6 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { GITHUB_URL, withBase } from '../data/site';
+import { GITHUB_URL, RELEASE_URL, VERSION, withBase } from '../data/site';
 
 // Intro curtain: each word's initial is kept, the rest collapses away to leave "PAS".
 const introWords = ['PORTABLE', 'AGENT', 'SESSIONS'];
@@ -366,6 +366,7 @@ const steps = [
       <div class="footer-links">
         <a href={withBase('/docs/introduction')} class="text-mono-xs color-muted">Docs</a>
         <a href={GITHUB_URL} class="text-mono-xs color-muted" target="_blank" rel="noopener">GitHub</a>
+        <a href={RELEASE_URL} class="text-mono-xs color-muted" target="_blank" rel="noopener">v{VERSION}</a>
       </div>
       <div class="text-mono-xs color-muted">Portable Agent Sessions · MIT License · Photos: Unsplash · Built by <a href="https://fhsystems.dev" class="footer-credit" target="_blank" rel="noopener">fhsystems</a></div>
     </div>

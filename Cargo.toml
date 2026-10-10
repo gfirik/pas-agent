@@ -6,7 +6,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT"
@@ -16,7 +16,7 @@ keywords = ["ai", "agents", "claude", "codex", "cli"]
 categories = ["command-line-utilities", "development-tools"]
 
 [workspace.dependencies]
-pas-agent-core = { path = "crates/pas-agent-core", version = "0.2.0" }
+pas-agent-core = { path = "crates/pas-agent-core", version = "0.2.1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
@@ -24,5 +24,6 @@ uuid = { version = "1", features = ["v4", "serde"] }
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
 tempfile = "3"
+fs4 = "1"
 assert_cmd = "2"
 predicates = "3"

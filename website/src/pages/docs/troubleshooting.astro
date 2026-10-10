@@ -26,6 +26,25 @@ import { withBase } from '../../data/site';
     (or move it away) and run <code>init</code> again.
   </p>
 
+  <h2>The Session Is Locked</h2>
+  <pre><code>Error: the session is locked by another pas-agent process (.pas-agent/session.lock); retry in a moment</code></pre>
+  <p>
+    Another <code>pas-agent</code> command, often from a second agent, is updating the session.
+    Commands wait up to 5 seconds, so a running command took longer than that. Retry. The lock
+    is released by the operating system when the holding process exits, even if it crashed, so
+    there is nothing to clean up and you should not delete <code>session.lock</code> by hand.
+  </p>
+
+  <h2>Warning: The Exported Context Is Too Long</h2>
+  <pre><code>⚠ AGENTS.md is 14211 characters, but antigravity reads at most 12000 of a rules file, so the end may be cut off.</code></pre>
+  <p>
+    Antigravity ignores everything past 12,000 characters of a rules file. The size counts the
+    whole file, including your own content outside the PAS-Agent block. The export is still
+    written. Shorten the session with <code>pas-agent remove &lt;list&gt; &lt;N&gt;</code>, for
+    example by removing old completed items. Other agents have no known limit, so they never
+    show this warning.
+  </p>
+
   <h2>Damaged Session File</h2>
   <pre><code>Error: .pas-agent/session.json is not a valid session file: EOF while parsing an object at line 2 column 0
 The session file is damaged. Fix the JSON by hand or restore it from git.</code></pre>
